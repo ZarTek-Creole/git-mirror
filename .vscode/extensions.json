@@ -1,0 +1,15 @@
+{
+    "recommendations": [
+        "remisa.shellman",
+        "timonwong.shellcheck",
+        "foxundermoon.shell-format",
+        "rogalmic.bash-debug",
+        "github.copilot",
+        "oderwat.indent-rainbow",
+        "gydunhn.vsc-essentials",
+        "gydunhn.vsc-essentials-themes",
+        "shakram02.bash-beautify",
+        "pkief.material-icon-theme",
+        "jeff-hykin.better-shellscript-syntax"
+    ]
+}
