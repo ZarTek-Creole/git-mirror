@@ -1,0 +1,63 @@
+name: Integration Tests
+
+on:
+  schedule:
+    - cron: '0 2 * * *'  # Daily at 2 AM
+  workflow_dispatch:
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y jq parallel git curl bash
+        npm install -g bats
+    
+    - name: Run integration tests with real API
+      env:
+        GITHUB_TOKEN: ${{ secrets.INTEGRATION_TEST_TOKEN }}
+      run: |
+        # Test with real GitHub API calls
+        bash git-mirror.sh --dry-run -v users microsoft --parallel 3
+        
+        # Test authentication
+        bash git-mirror.sh --dry-run -v users microsoft --parallel 1
+        
+        # Test error handling
+        bash git-mirror.sh --dry-run -v users nonexistent-user
+    
+    - name: Run load tests
+      run: |
+        bash tests/load/test_load.sh --dry-run --repos 50 --parallel 5 --timeout 300
+    
+    - name: Benchmark performance
+      run: |
+        echo "=== Performance Benchmark ===" > benchmark-results.txt
+        echo "Date: $(date)" >> benchmark-results.txt
+        echo "OS: $(uname -a)" >> benchmark-results.txt
+        echo "Bash version: $(bash --version | head -1)" >> benchmark-results.txt
+        echo "Git version: $(git --version)" >> benchmark-results.txt
+        echo "jq version: $(jq --version)" >> benchmark-results.txt
+        echo "parallel version: $(parallel --version | head -1)" >> benchmark-results.txt
+        echo "" >> benchmark-results.txt
+        
+        # Sequential test
+        echo "Sequential test:" >> benchmark-results.txt
+        time bash git-mirror.sh --dry-run -v users microsoft --parallel 1 >> benchmark-results.txt 2>&1
+        
+        # Parallel test
+        echo "Parallel test (5 jobs):" >> benchmark-results.txt
+        time bash git-mirror.sh --dry-run -v users microsoft --parallel 5 >> benchmark-results.txt 2>&1
+        
+        cat benchmark-results.txt
+    
+    - name: Upload benchmark results
+      uses: actions/upload-artifact@v3
+      with:
+        name: benchmark-results
+        path: benchmark-results.txt

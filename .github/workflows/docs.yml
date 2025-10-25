@@ -1,0 +1,57 @@
+name: Documentation
+
+on:
+  push:
+    branches: [ main ]
+    paths: [ 'docs/**', 'README.md', '*.md' ]
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y pandoc markdownlint-cli
+    
+    - name: Validate documentation
+      run: |
+        # Check markdown files
+        markdownlint README.md docs/*.md
+        
+        # Check for broken links
+        find . -name "*.md" -exec grep -l "http" {} \; | while read file; do
+          echo "Checking links in $file"
+          grep -o 'http[^)]*' "$file" | while read url; do
+            if ! curl -s --head "$url" | head -1 | grep -q "200 OK"; then
+              echo "Warning: Broken link in $file: $url"
+            fi
+          done
+        done
+    
+    - name: Generate man page
+      run: |
+        if [ -f docs/git-mirror.1.md ]; then
+          pandoc docs/git-mirror.1.md -s -t man -o docs/git-mirror.1
+          echo "Man page generated: docs/git-mirror.1"
+        else
+          echo "No man page source found"
+        fi
+    
+    - name: Update README
+      run: |
+        if [ -f docs/README.md ]; then
+          cp docs/README.md README.md
+          echo "README updated from docs/README.md"
+        fi
+    
+    - name: Commit changes
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add README.md docs/git-mirror.1
+        git diff --staged --quiet || git commit -m "Update documentation [skip ci]"
+        git push

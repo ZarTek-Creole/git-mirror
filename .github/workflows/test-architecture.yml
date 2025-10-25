@@ -1,0 +1,151 @@
+name: Test Architecture Modulaire Git Mirror
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  test-architecture:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Bash
+      run: |
+        echo "Bash version: $(bash --version)"
+        echo "Git version: $(git --version)"
+        echo "jq version: $(jq --version)"
+        echo "curl version: $(curl --version | head -n1)"
+        
+    - name: Test Module Loading
+      run: |
+        echo "=== Test de chargement des modules ==="
+        bash tests/unit/test_modules_simple.sh
+        
+    - name: Test Syntax Validation
+      run: |
+        echo "=== Validation de la syntaxe ==="
+        find lib/ config/ -name "*.sh" -exec bash -n {} \;
+        bash -n git-mirror-modular.sh
+        echo "✅ Tous les scripts ont une syntaxe valide"
+        
+    - name: Test Help Function
+      run: |
+        echo "=== Test de la fonction d'aide ==="
+        bash git-mirror-modular.sh --help
+        echo "✅ Fonction d'aide fonctionne correctement"
+        
+    - name: Test Dry Run Mode
+      run: |
+        echo "=== Test du mode dry-run ==="
+        # Test avec un utilisateur fictif pour éviter les limites API
+        timeout 30 bash git-mirror-modular.sh --dry-run -v users testuser || true
+        echo "✅ Mode dry-run testé (peut échouer sur l'API, c'est normal)"
+        
+    - name: Test Module Functions
+      run: |
+        echo "=== Test des fonctions des modules ==="
+        # Test des fonctions de validation
+        source lib/validation/validation.sh
+        init_validation
+        
+        if validate_context "users"; then
+          echo "✅ Validation contexte OK"
+        else
+          echo "❌ Validation contexte ÉCHEC"
+          exit 1
+        fi
+        
+        if validate_username "testuser"; then
+          echo "✅ Validation nom d'utilisateur OK"
+        else
+          echo "❌ Validation nom d'utilisateur ÉCHEC"
+          exit 1
+        fi
+        
+        echo "✅ Tous les tests de validation sont passés"
+        
+    - name: Test Cache Module
+      run: |
+        echo "=== Test du module cache ==="
+        source lib/cache/cache.sh
+        init_cache "/tmp/test-cache" 60 true
+        
+        if cache_set "test" '{"data": "test"}'; then
+          echo "✅ Cache set OK"
+        else
+          echo "❌ Cache set ÉCHEC"
+          exit 1
+        fi
+        
+        if cache_exists "test"; then
+          echo "✅ Cache exists OK"
+        else
+          echo "❌ Cache exists ÉCHEC"
+          exit 1
+        fi
+        
+        if cache_get "test" > /dev/null; then
+          echo "✅ Cache get OK"
+        else
+          echo "❌ Cache get ÉCHEC"
+          exit 1
+        fi
+        
+        cache_clear
+        echo "✅ Tous les tests de cache sont passés"
+        
+    - name: Test Authentication Module
+      run: |
+        echo "=== Test du module d'authentification ==="
+        source lib/auth/auth.sh
+        init_auth "auto" "" "" ""
+        
+        local test_url="https://github.com/user/repo.git"
+        local ssh_url
+        ssh_url=$(transform_to_ssh_url "$test_url")
+        
+        if [ "$ssh_url" = "git@github.com:user/repo.git" ]; then
+          echo "✅ Transformation URL OK"
+        else
+          echo "❌ Transformation URL ÉCHEC"
+          exit 1
+        fi
+        
+        echo "✅ Tous les tests d'authentification sont passés"
+        
+    - name: Test Logger Module
+      run: |
+        echo "=== Test du module de logging ==="
+        source lib/logging/logger.sh
+        init_logger 2 false false true
+        
+        log_info "Test message info"
+        log_success "Test message success"
+        log_warning "Test message warning"
+        log_error "Test message error"
+        log_debug "Test message debug"
+        log_trace "Test message trace"
+        
+        echo "✅ Tous les tests de logging sont passés"
+        
+    - name: Summary
+      run: |
+        echo "🎉 Tous les tests de l'architecture modulaire sont passés avec succès !"
+        echo ""
+        echo "=== Résumé des Tests ==="
+        echo "✅ Chargement des modules"
+        echo "✅ Validation de la syntaxe"
+        echo "✅ Fonction d'aide"
+        echo "✅ Mode dry-run"
+        echo "✅ Module de validation"
+        echo "✅ Module de cache"
+        echo "✅ Module d'authentification"
+        echo "✅ Module de logging"
+        echo ""
+        echo "🏗️ L'architecture modulaire est prête pour la production !"

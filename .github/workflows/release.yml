@@ -1,0 +1,89 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y jq parallel git curl bash
+        npm install -g bats
+    
+    - name: Run tests
+      run: |
+        shellcheck git-mirror.sh lib/*/*.sh config/*.sh
+        bats tests/unit/
+        bash tests/integration/test_integration.sh
+    
+    - name: Create package
+      run: |
+        mkdir -p dist/
+        tar -czf dist/git-mirror-${GITHUB_REF_NAME}.tar.gz \
+          --exclude='.git' \
+          --exclude='.git-mirror-cache' \
+          --exclude='.git-mirror-state*' \
+          --exclude='dist' \
+          --exclude='test-results' \
+          .
+    
+    - name: Create release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Release ${{ github.ref }}
+        body: |
+          ## Changes in this Release
+          
+          - Improved authentication handling
+          - Added parallel processing support
+          - Enhanced error handling and logging
+          - Added comprehensive test suite
+          - Improved documentation and installation
+          
+          ## Installation
+          
+          ```bash
+          # Download and extract
+          wget https://github.com/${{ github.repository }}/releases/download/${{ github.ref }}/git-mirror-${{ github.ref_name }}.tar.gz
+          tar -xzf git-mirror-${{ github.ref_name }}.tar.gz
+          cd git-mirror-${{ github.ref_name }}
+          
+          # Install
+          ./install.sh --deps --test
+          ```
+          
+          ## Usage
+          
+          ```bash
+          # Basic usage
+          git-mirror users microsoft
+          
+          # With parallel processing
+          git-mirror users microsoft --parallel 5
+          
+          # Dry run mode
+          git-mirror users microsoft --dry-run
+          ```
+        draft: false
+        prerelease: false
+    
+    - name: Upload package
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: dist/git-mirror-${GITHUB_REF_NAME}.tar.gz
+        asset_name: git-mirror-${GITHUB_REF_NAME}.tar.gz
+        asset_content_type: application/gzip

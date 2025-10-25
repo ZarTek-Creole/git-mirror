@@ -1,0 +1,92 @@
+# Git Mirror - .gitignore
+
+# Fichiers de cache et d'état
+.git-mirror-cache/
+.git-mirror-state/
+.git-mirror-state.json
+
+# Fichiers temporaires
+*.tmp
+*.temp
+*.log
+*.pid
+*.lock
+
+# Répertoires de test
+test-results/
+/tmp/
+/temp/
+
+# Fichiers de configuration locale
+config/local.conf
+.env
+.env.local
+
+# Fichiers de sauvegarde
+*.bak
+*.backup
+*~
+
+# Fichiers de système
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Fichiers d'éditeur
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Fichiers de build
+dist/
+build/
+*.tar.gz
+*.zip
+
+# Fichiers de dépendances
+node_modules/
+vendor/
+
+# Fichiers de logs
+logs/
+*.log
+
+# Fichiers de test
+coverage/
+.nyc_output/
+
+# Fichiers de documentation générés
+docs/generated/
+*.1
+*.pdf
+
+# Fichiers de métriques
+metrics/
+*.json
+*.csv
+
+# Fichiers de parallélisation
+parallel.log
+*.parallel
+
+# Fichiers de test (seulement les dossiers de test à la racine)
+/tests/results/
+/test-results/
+
+# Fichiers d'état
+state/
+*.state
+
+# Fichiers de métriques
+metrics/
+*.metrics
+
+# Fichiers interactifs
+interactive/
+*.interactive
+
+# Fichiers incrémentaux
+incremental/
+*.incremental

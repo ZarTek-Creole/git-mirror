@@ -1,0 +1,19 @@
+name: Markdownlint
+
+on: [push, pull_request]
+
+jobs:
+  markdownlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Markdownlint
+        run: npm install -g markdownlint-cli
+      
+      - name: Run Markdownlint
+        run: |
+          echo "=== Markdownlint sur tous les fichiers Markdown ==="
+          markdownlint '**/*.md' --ignore node_modules
+          
+          echo "=== Markdownlint terminé avec succès ==="

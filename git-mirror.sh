@@ -1,77 +1,711 @@
 #!/bin/bash
-set -e
-# Set a timeout of 30 seconds for the git command
-timeout=30
+# Script Principal: git-mirror.sh (Version Modulaire)
+# Description: Script principal utilisant l'architecture modulaire
+# Pattern: Facade + Command + Observer
+# Author: ZarTek-Creole
+# Date: 2025-10-25
 
-# Install jq if it's not already present
-if ! command -v jq >/dev/null; then
-	echo "Installing jq..."
-	if command -v pip3 >/dev/null; then
-		pip3 install jq
-	else
-		echo "Error: pip3 not found. Please install jq manually."
-		exit 1
-	fi
-fi
+# Configuration de sécurité Bash
+set -euo pipefail
 
-if [ $# -ne 2 ]; then
-	echo "Usage: $0 context username_or_orgname"
-	echo "Example: $0 users ZarTek-Creole"
+# Informations du script
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+readonly SCRIPT_DIR
+readonly SCRIPT_VERSION="2.0.0"
+
+# Répertoires des modules
+readonly LIB_DIR="$SCRIPT_DIR/lib"
+readonly CONFIG_DIR="$SCRIPT_DIR/config"
+
+# Charger les modules
+source "$LIB_DIR/logging/logger.sh"
+source "$CONFIG_DIR/config.sh"
+source "$LIB_DIR/auth/auth.sh"
+source "$LIB_DIR/api/github_api.sh"
+source "$LIB_DIR/validation/validation.sh"
+source "$LIB_DIR/git/git_ops.sh"
+source "$LIB_DIR/cache/cache.sh"
+source "$LIB_DIR/parallel/parallel.sh"
+source "$LIB_DIR/filters/filters.sh"
+source "$LIB_DIR/metrics/metrics.sh"
+source "$LIB_DIR/interactive/interactive.sh"
+source "$LIB_DIR/state/state.sh"
+source "$LIB_DIR/incremental/incremental.sh"
+
+# Variables globales
+INTERRUPTED=false
+success_repos=0
+failed_repos=0
+total_repos=0
+
+# Fonction d'aide
+show_help() {
+    echo "Git Mirror - Version $SCRIPT_VERSION"
+    echo "Usage: $0 [OPTIONS] context username_or_orgname"
+    echo ""
+    echo "Arguments:"
+    echo "  context              Type de contexte (users ou orgs)"
+    echo "  username_or_orgname  Nom d'utilisateur ou d'organisation GitHub"
+    echo ""
+    echo "Options:"
+    echo "  -d, --destination DIR    Répertoire de destination (défaut: ./repositories)"
+    echo "  -b, --branch BRANCH      Branche spécifique à cloner (défaut: branche par défaut)"
+    echo "  -f, --filter FILTER       Filtre Git pour le clonage partiel (ex: blob:none)"
+    echo "  -n, --no-checkout        Cloner sans checkout initial"
+    echo "  -s, --single-branch      Cloner une seule branche"
+    echo "  --depth DEPTH            Profondeur du clonage shallow (défaut: 1)"
+    echo "  --timeout SECONDS        Timeout pour les opérations Git (défaut: 30)"
+    echo "  --parallel JOBS          Nombre de jobs parallèles (défaut: 1, nécessite GNU parallel)"
+    echo "  --resume                 Reprendre une exécution interrompue"
+    echo "  --incremental            Mode incrémental (traite seulement les repos modifiés)"
+    echo "  --exclude PATTERN        Exclure les repos correspondant au pattern (peut être utilisé plusieurs fois)"
+    echo "  --exclude-file FILE      Lire les patterns d'exclusion depuis un fichier"
+    echo "  --include PATTERN        Inclure uniquement les repos correspondant au pattern (peut être utilisé plusieurs fois)"
+    echo "  --include-file FILE      Lire les patterns d'inclusion depuis un fichier"
+    echo "  --metrics FILE           Exporter les métriques vers un fichier (formats: json,csv,html)"
+    echo "  --interactive            Mode interactif avec confirmations"
+    echo "  --confirm                Afficher un résumé et demander confirmation avant de commencer"
+    echo "  --yes, -y                Mode automatique (ignorer toutes les confirmations)"
+    echo "  -v, --verbose            Mode verbeux (peut être utilisé plusieurs fois: -vv, -vvv)"
+    echo "  -q, --quiet              Mode silencieux (sortie minimale)"
+    echo "  --dry-run                Simulation sans actions réelles"
+    echo "  --skip-count             Éviter le calcul du nombre total de dépôts (utile si limite API)"
+    echo "  -h, --help               Afficher cette aide"
+    echo ""
+    echo "Exemples:"
+    echo "  $0 users ZarTek-Creole"
+    echo "  $0 -d /path/to/repos users ZarTek-Creole"
+    echo "  $0 -b main -f blob:none users ZarTek-Creole"
+    echo "  $0 -s -n --depth 5 orgs microsoft"
+    echo "  $0 --dry-run -vv users microsoft"
+    echo "  $0 -q users microsoft"
+    echo "  $0 --resume users microsoft"
+    echo "  $0 --incremental users microsoft"
+    echo ""
+    echo "Dépendances:"
+    echo "  Obligatoires: git >= 2.25, jq >= 1.6, curl >= 7.68"
+    echo "  Optionnelles: GNU parallel (pour --parallel), SSH keys (pour auth SSH)"
+    echo ""
+    echo "Variables d'environnement:"
+    echo "  GITHUB_TOKEN     Token d'accès personnel GitHub"
+    echo "  GITHUB_SSH_KEY   Chemin vers la clé SSH privée"
+    echo "  GITHUB_AUTH_METHOD  Force la méthode d'authentification (token/ssh/public)"
+}
+
+# Fonction de gestion des interruptions
+handle_interrupt() {
+    log_warning "Interruption détectée (SIGINT/SIGTERM)"
+    INTERRUPTED=true
+    
+    # Sauvegarder l'état actuel si possible
+    if [ -n "${total_repos:-}" ] && [ -n "${success_repos:-}" ] && [ -n "${failed_repos:-}" ]; then
+        _save_state
+    fi
+    
+    log_info "Arrêt en cours... (Ctrl+C pour forcer l'arrêt)"
+    cleanup
+    exit 130
+}
+
+# Fonction de nettoyage
+cleanup() {
+    if [ "$QUIET" = false ]; then
+        log_info "Nettoyage en cours..."
+    fi
+    
+    # Nettoyer les fichiers temporaires
+    local temp_files=(
+        "/tmp/git-mirror-*.tmp"
+        "/tmp/git-mirror-state-*.json"
+        "$SCRIPT_DIR/.git-mirror-temp-*"
+    )
+    
+    for pattern in "${temp_files[@]}"; do
+        if ls "$pattern" >/dev/null 2>&1; then
+            rm -f "$pattern"
+            if [ "$VERBOSE" -ge 2 ]; then
+                log_debug "Fichiers temporaires nettoyés: $pattern"
+            fi
+        fi
+    done
+    
+    # Nettoyer les fichiers d'état si l'exécution s'est bien passée
+    if [ -f "$STATE_FILE" ] && [ "$INTERRUPTED" = false ]; then
+        rm -f "$STATE_FILE"
+        if [ "$VERBOSE" -ge 1 ]; then
+            log_info "Fichier d'état nettoyé (exécution réussie)"
+        fi
+    fi
+    
+    if [ "$VERBOSE" -ge 1 ]; then
+        log_info "Nettoyage terminé"
+    fi
+}
+
+# Sauvegarder l'état de l'exécution
+_save_state() {
+    local state_data
+    state_data=$(cat <<EOF
+{
+  "interrupted": $INTERRUPTED,
+  "total_repos": $total_repos,
+  "success_repos": $success_repos,
+  "failed_repos": $failed_repos,
+  "timestamp": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+  "context": "$context",
+  "username": "$username_or_orgname"
+}
+EOF
+)
+    
+    echo "$state_data" > "$STATE_FILE" 2>/dev/null || true
+}
+
+# Charger l'état de l'exécution
+_load_state() {
+    if [ -f "$STATE_FILE" ]; then
+        if command -v jq >/dev/null 2>&1; then
+            total_repos=$(jq -r '.total_repos // 0' "$STATE_FILE")
+            success_repos=$(jq -r '.success_repos // 0' "$STATE_FILE")
+            failed_repos=$(jq -r '.failed_repos // 0' "$STATE_FILE")
+            log_info "État chargé: $success_repos succès, $failed_repos échecs sur $total_repos dépôts"
+            return 0
+        fi
+    fi
+    return 1
+}
+
+# Vérifier si on doit reprendre
+should_resume() {
+    if [ "$RESUME" = true ]; then
+        if [ -f "$STATE_FILE" ]; then
+            local interrupted
+            interrupted=$(jq -r '.interrupted' "$STATE_FILE" 2>/dev/null)
+            if [ "$interrupted" = "true" ]; then
+                log_info "Option --resume activée et état interrompu détecté"
+                return 0
+            else
+                log_warning "Option --resume activée mais aucun état interrompu trouvé"
+                return 1
+            fi
+        else
+            log_warning "Option --resume activée mais aucun fichier d'état trouvé"
+            return 1
+        fi
+    fi
+    
+    # Détection automatique d'un état interrompu
+    if [ -f "$STATE_FILE" ]; then
+        local interrupted
+        interrupted=$(jq -r '.interrupted' "$STATE_FILE" 2>/dev/null)
+        if [ "$interrupted" = "true" ]; then
+            log_info "État interrompu détecté automatiquement"
+            return 0
+        fi
+    fi
+    return 1
+}
+
+# Traitement des options avec getopts
+parse_options() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -d|--destination)
+                DEST_DIR="$2"
+                shift 2
+                ;;
+            -b|--branch)
+                BRANCH="$2"
+                shift 2
+                ;;
+            -f|--filter)
+                FILTER="$2"
+                shift 2
+                ;;
+            -n|--no-checkout)
+                NO_CHECKOUT=true
+                shift
+                ;;
+            -s|--single-branch)
+                SINGLE_BRANCH=true
+                shift
+                ;;
+            --depth)
+                if [ $# -lt 2 ] || [ -z "$2" ] || [[ "$2" =~ ^- ]]; then
+                    log_fatal "L'option --depth nécessite un argument (profondeur)"
+                fi
+                DEPTH="$2"
+                shift 2
+                ;;
+            --timeout)
+                if [ $# -lt 2 ] || [ -z "$2" ] || [[ "$2" =~ ^- ]]; then
+                    log_fatal "L'option --timeout nécessite un argument (secondes)"
+                fi
+                TIMEOUT_CUSTOM="$2"
+                shift 2
+                ;;
+            --parallel)
+                if [ $# -lt 2 ] || [ -z "$2" ] || [[ "$2" =~ ^- ]]; then
+                    log_fatal "L'option --parallel nécessite un argument (nombre de jobs)"
+                fi
+                PARALLEL_JOBS="$2"
+                shift 2
+                ;;
+            --resume)
+                RESUME=true
+                shift
+                ;;
+            --incremental)
+                INCREMENTAL=true
+                shift
+                ;;
+            --exclude)
+                if [ $# -lt 2 ] || [ -z "$2" ] || [[ "$2" =~ ^- ]]; then
+                    log_fatal "L'option --exclude nécessite un argument (pattern)"
+                fi
+                EXCLUDE_PATTERNS+=("$2")
+                shift 2
+                ;;
+            --exclude-file)
+                if [ $# -lt 2 ] || [ -z "$2" ] || [[ "$2" =~ ^- ]]; then
+                    log_fatal "L'option --exclude-file nécessite un argument (fichier)"
+                fi
+                EXCLUDE_FILE="$2"
+                shift 2
+                ;;
+            --include)
+                if [ $# -lt 2 ] || [ -z "$2" ] || [[ "$2" =~ ^- ]]; then
+                    log_fatal "L'option --include nécessite un argument (pattern)"
+                fi
+                INCLUDE_PATTERNS+=("$2")
+                shift 2
+                ;;
+            --include-file)
+                if [ $# -lt 2 ] || [ -z "$2" ] || [[ "$2" =~ ^- ]]; then
+                    log_fatal "L'option --include-file nécessite un argument (fichier)"
+                fi
+                INCLUDE_FILE="$2"
+                shift 2
+                ;;
+            --metrics)
+                if [ $# -lt 2 ] || [ -z "$2" ] || [[ "$2" =~ ^- ]]; then
+                    log_fatal "L'option --metrics nécessite un argument (fichier)"
+                fi
+                METRICS_FILE="$2"
+                METRICS_ENABLED=true
+                shift 2
+                ;;
+            --interactive)
+                INTERACTIVE_MODE=true
+                shift
+                ;;
+            --confirm)
+                CONFIRM_MODE=true
+                shift
+                ;;
+            --yes|-y)
+                AUTO_YES=true
+                shift
+                ;;
+            -v|--verbose)
+                VERBOSE=$((VERBOSE + 1))
+                shift
+                ;;
+            -q|--quiet)
+                QUIET=true
+                shift
+                ;;
+            --dry-run)
+                DRY_RUN=true
+                shift
+                ;;
+            --skip-count)
+                SKIP_COUNT=true
+                shift
+                ;;
+            -h|--help)
+                show_help
+                exit 0
+                ;;
+            -*)
+                echo "Option inconnue: $1" >&2
+                show_help
+                exit 1
+                ;;
+            *)
+                # Arguments positionnels
+                if [ -z "$context" ]; then
+                    context="$1"
+                elif [ -z "$username_or_orgname" ]; then
+                    username_or_orgname="$1"
+                else
+                    echo "Trop d'arguments positionnels" >&2
+                    show_help
 	exit 1
 fi
-context=$1
-username_or_orgname=$2
-
-# Function to handle the "detected dubious ownership in repository" error
-handle_error() {
-	echo "Detected dubious ownership in repository: $1"
-	echo "Setting safe.directory to true... $(pwd)"
-	git config --global --add safe.directory "$(pwd)"
+                shift
+                ;;
+        esac
+    done
 }
 
-clone_or_update_repo() {
-	local repo_url=$1
-	local repo_name=$(basename "$repo_url" .git)
-	if [[ $repo_name =~ ^\. ]]; then
-		echo "Skip $repo_name..."
-		# Skip repositories whose names start with a '.'
-		return
-	fi
-	if [ -d "$repo_name" ]; then
-		# Try to update the repository
-		(cd "$repo_name" && timeout $timeout git pull --recurse-submodules --depth=1 --quiet || handle_error "$repo_name")
-	else
-		# Try to clone the repository
-		timeout $timeout git clone --recurse-submodules --depth=1 --quiet "$repo_url" || handle_error "$repo_name"
-	fi
+# Vérifier les dépendances
+check_dependencies() {
+    # Vérifier git
+    if ! command -v git >/dev/null 2>&1; then
+        log_error "Git n'est pas installé"
+        return 1
+    fi
+    
+    # Vérifier jq
+    if ! command -v jq >/dev/null 2>&1; then
+        log_error "jq n'est pas installé"
+        return 1
+    fi
+    
+    # Vérifier curl
+    if ! command -v curl >/dev/null 2>&1; then
+        log_error "curl n'est pas installé"
+        return 1
+    fi
+    
+    log_debug "Toutes les dépendances sont installées"
+    return 0
 }
 
-# Initialize the page number
-page_number=1
-
-# Initialize the counter
-counter=1
-
-# Get the total number of repositories that are not forks
-total_repos=$(curl -s "https://api.github.com/$context/$username_or_orgname/repos?per_page=100&parent=null" | jq '. | length')
+# Fonction principale
+main() {
+    # Configuration des signaux
+    trap handle_interrupt SIGINT SIGTERM
+    
+    # Initialiser les modules
+    init_logger "$VERBOSE" "$QUIET" "$DRY_RUN" true
+    init_config
+    
+    # Initialiser l'authentification
+    if ! auth_setup; then
+        log_error "Échec de l'initialisation de l'authentification"
+        exit 1
+    fi
+    
+    # Initialiser l'API GitHub
+    if ! api_setup; then
+        log_error "Échec de l'initialisation de l'API GitHub"
+        exit 1
+    fi
+    
+    # Initialiser la validation
+    if ! validate_setup; then
+        log_error "Échec de l'initialisation de la validation"
+        exit 1
+    fi
+    
+    # Initialiser les opérations Git
+    if ! git_ops_setup; then
+        log_error "Échec de l'initialisation des opérations Git"
+        exit 1
+    fi
+    
+    # Initialiser le cache
+    if ! cache_setup; then
+        log_error "Échec de l'initialisation du cache"
+        exit 1
+    fi
+    
+    # Initialiser la parallélisation
+    if ! parallel_setup; then
+        log_error "Échec de l'initialisation de la parallélisation"
+        exit 1
+    fi
+    
+    # Initialiser le filtrage
+    if ! filters_setup; then
+        log_error "Échec de l'initialisation du filtrage"
+        exit 1
+    fi
+    
+    # Initialiser les métriques
+    if ! metrics_setup; then
+        log_error "Échec de l'initialisation des métriques"
+        exit 1
+    fi
+    
+    # Initialiser l'interface interactive
+    if ! interactive_setup; then
+        log_error "Échec de l'initialisation de l'interface interactive"
+        exit 1
+    fi
+    
+    # Initialiser la gestion d'état
+    if ! state_setup; then
+        log_error "Échec de l'initialisation de la gestion d'état"
+        exit 1
+    fi
+    
+    # Initialiser le mode incrémental
+    if ! incremental_setup; then
+        log_error "Échec de l'initialisation du mode incrémental"
+        exit 1
+    fi
+    
+    # Vérifier les dépendances
+    check_dependencies
+    
+    # Afficher la configuration
+    if [ "$QUIET" = false ]; then
+        get_config
+    fi
+    
+    # Mode dry-run
+    if [ "$DRY_RUN" = true ]; then
+        log_dry_run "=== MODE DRY-RUN ACTIVÉ ==="
+        log_dry_run "Aucune action réelle ne sera effectuée"
+        log_dry_run "================================"
+    fi
+    
+    log_info "Début du processus de synchronisation Git Mirror"
+    log_info "Cible: $context/$username_or_orgname"
+    
+    # Vérifier si on doit reprendre
+    if should_resume; then
+        if _load_state; then
+            log_info "Reprise de l'exécution interrompue"
+        else
+            log_warning "Impossible de charger l'état, démarrage normal"
+        fi
+    fi
+    
+    # Obtenir les headers d'authentification pour les appels API
+    local auth_headers
+    auth_headers=$(auth_get_headers "$GITHUB_AUTH_METHOD")
+    
+    # Calculer le nombre total de dépôts
+    if [ "$SKIP_COUNT" = true ]; then
+        log_info "Calcul du nombre total de dépôts ignoré (--skip-count activé)"
+        total_repos=100  # Estimation par défaut
+    else
+        log_info "Calcul du nombre total de dépôts..."
+        
+        if [ "$total_repos" -eq 0 ]; then
+            total_repos=$(api_get_total_repos "$context" "$username_or_orgname")
+            
+            # Vérifier que total_repos est un nombre valide
+            log_debug "Valeur totale reçue: '$total_repos' (longueur: ${#total_repos})"
+            if ! [[ "$total_repos" =~ ^[0-9]+$ ]]; then
+                log_error "Nombre de dépôts invalide: '$total_repos'"
+                exit 1
+            fi
+            
+            if [ "$total_repos" -eq 0 ]; then
+                log_warning "Aucun dépôt trouvé ou limite de taux API atteinte pour $context/$username_or_orgname"
+                log_info "Utilisation d'une estimation par défaut (100 repos)"
+                total_repos=100  # Estimation par défaut
+            fi
+            
+            # Mettre en cache le nombre total
+            cache_set_total_repos "$context" "$username_or_orgname" "$total_repos"
+        fi
+    fi
+    
+    log_info "Nombre total de dépôts à traiter: $total_repos"
+    
+    # Demander confirmation avant de commencer
+    local estimated_space
+    estimated_space=$((total_repos * 50))  # 50MB par repo
+    
+    if ! interactive_confirm_start "$context" "$username_or_orgname" "$DEST_DIR" "$total_repos" "$estimated_space" "$PARALLEL_JOBS" "$FILTER_ENABLED" "$INCREMENTAL_ENABLED" "$GITHUB_AUTH_METHOD"; then
+        log_info "Opération annulée par l'utilisateur"
+        exit 0
+    fi
+    
+    # Vérifier l'espace disque
+    if [ "$DRY_RUN" = false ]; then
+        log_info "Espace estimé requis: ${estimated_space}MB"
+    else
+        log_dry_run "Vérification de l'espace disque (simulation)"
+    fi
+    
+    # Créer le répertoire de destination
+    if [ "$DRY_RUN" = false ]; then
+        if ! mkdir -p "$DEST_DIR"; then
+            log_fatal "Impossible de créer le répertoire de destination: $DEST_DIR"
+        fi
+    else
+        log_dry_run "Création du répertoire de destination: $DEST_DIR"
+    fi
+    
+    # Traitement des dépôts
+    local page_number=1
+    local counter=$((success_repos + failed_repos + 1))
 
 while [ $counter -le "$total_repos" ]; do
-
-	# Fetch the list of repositories from the GitHub API
-	repos=$(curl -s "https://api.github.com/$context/$username_or_orgname/repos?page=$page_number&per_page=100&parent=null" | jq -r '.[].clone_url')
-
-	#Clone or update each repository
-	for repo_url in $repos; do
-		# Display the current count and the total number of repositories
-		echo "Cloning or updating repository $counter/$total_repos: $(basename "$repo_url")"
-		clone_or_update_repo "$repo_url"
-		((counter = counter + 1))
-	done
-
-	#Break out of the loop if there are no more pages of results
-	if [ -z "$repos" ]; then
+        log_info "Récupération des dépôts (page $page_number)..."
+        
+        local repos_json
+        repos_json=$(api_fetch_all_repos "$context" "$username_or_orgname")
+        
+        local api_exit_code=$?
+        if [ $api_exit_code -ne 0 ] || [ -z "$repos_json" ]; then
+            log_error "Échec de la récupération de la page $page_number"
 		break
 	fi
+        
+        # Vérifier que repos_json contient du JSON valide
+        if [ "$repos_json" = "0" ] || [ -z "$repos_json" ] || ! echo "$repos_json" | jq empty 2>/dev/null; then
+            log_error "Réponse API invalide pour la page $page_number"
+            break
+        fi
+        
+        # En mode incrémental, filtrer les dépôts modifiés
+        local repos_to_process
+        if [ "$INCREMENTAL" = true ]; then
+            local last_sync
+            last_sync=$(cache_get_last_sync "$context" "$username_or_orgname")
+            repos_to_process=$(echo "$repos_json" | jq -r --arg last_sync "$last_sync" '
+                .[] | select(.pushed_at > $last_sync) | .clone_url
+            ')
+            
+            local filtered_count
+            filtered_count=$(echo "$repos_to_process" | wc -l)
+            log_info "Mode incrémental: $filtered_count dépôts modifiés depuis $last_sync"
+        else
+            repos_to_process=$(echo "$repos_json" | jq -r '.[].clone_url')
+        fi
+        
+        # Traiter chaque dépôt
+        while IFS= read -r repo_url; do
+            if [ -n "$repo_url" ] && [ "$repo_url" != "null" ]; then
+                local repo_name
+                repo_name=$(basename "$repo_url" .git)
+                log_info "Traitement du dépôt $counter/$total_repos: $repo_name"
+                
+                # Transformer l'URL selon la méthode d'authentification
+                local final_url
+                if [ "$AUTH_METHOD" = "ssh" ]; then
+                    final_url=$(transform_to_ssh_url "$repo_url")
+                else
+                    final_url="$repo_url"
+                fi
+                
+                if [ "$DRY_RUN" = true ]; then
+                    log_dry_run "Clonage du dépôt: $repo_name dans $DEST_DIR/$repo_name"
+                    log_dry_run "  Commande qui serait exécutée:"
+                    log_dry_run "    - git clone [options] $final_url"
+                    success_repos=$((success_repos + 1))
+                else
+                    local repo_path="$DEST_DIR/$repo_name"
+                    
+                    if repository_exists "$repo_path"; then
+                        if update_repository "$repo_path" "$BRANCH"; then
+                            success_repos=$((success_repos + 1))
+                        else
+                            failed_repos=$((failed_repos + 1))
+                            log_error "Échec de la mise à jour: $repo_name"
+                        fi
+                    else
+                        if clone_repository "$final_url" "$DEST_DIR" "$BRANCH" "$DEPTH" "$FILTER" "$SINGLE_BRANCH" "$NO_CHECKOUT"; then
+                            success_repos=$((success_repos + 1))
+                        else
+                            failed_repos=$((failed_repos + 1))
+                            log_error "Échec du clonage: $repo_name"
+                        fi
+                    fi
+                fi
+                
+                counter=$((counter + 1))
+                
+                # Sauvegarder l'état tous les 10 dépôts traités
+                if [ $((counter % 10)) -eq 0 ]; then
+                    _save_state
+                fi
+            fi
+        done <<< "$repos_to_process"
 
 	page_number=$((page_number + 1))
 done
+    
+    # Résumé final
+    log_info "=== Résumé de la synchronisation ==="
+    log_success "Dépôts traités avec succès: $success_repos"
+    if [ "$failed_repos" -gt 0 ]; then
+        log_warning "Dépôts en échec: $failed_repos"
+    fi
+    log_info "Total traité: $((success_repos + failed_repos))/$total_repos"
+    
+    # Mettre à jour le timestamp de synchronisation en mode incrémental
+    if [ "$INCREMENTAL" = true ] && [ "$failed_repos" -eq 0 ]; then
+        cache_set_last_sync "$context" "$username_or_orgname"
+    fi
+    
+    # Afficher les statistiques des modules
+    if [ "$VERBOSE" -ge 2 ]; then
+        echo ""
+        # Afficher les statistiques API si disponibles
+        if command -v api_get_stats >/dev/null 2>&1; then
+            api_get_stats
+        fi
+        echo ""
+        get_git_stats
+        echo ""
+        get_cache_stats
+        echo ""
+        get_parallel_stats
+        echo ""
+        get_filter_stats
+        echo ""
+        get_interactive_stats
+    fi
+    
+    # Exporter les métriques
+    if [ "$METRICS_ENABLED" = true ]; then
+        export_metrics "$METRICS_FILE" "json"
+    fi
+    
+    # Nettoyage final
+    cleanup
+    parallel_cleanup
+    
+    if [ "$failed_repos" -gt 0 ]; then
+        exit 1
+    else
+        exit 0
+    fi
+}
+
+# Point d'entrée principal
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    # Vérifier si --help est demandé
+    if [[ "$*" =~ --help ]] || [[ "$*" =~ -h ]]; then
+        show_help
+        exit 0
+    fi
+    
+    # Vérifier les arguments
+    if [ $# -lt 2 ]; then
+        echo "Usage: $0 [OPTIONS] context username_or_orgname" >&2
+        echo "Utilisez '$0 --help' pour plus d'informations" >&2
+        exit 1
+    fi
+    
+    # Parser les options
+    parse_options "$@"
+    
+    # Initialiser le logger pour les messages d'erreur
+    init_logger "$VERBOSE" "$QUIET" "$DRY_RUN" true
+    
+    # Valider les arguments
+    if [ -z "$context" ] || [ -z "$username_or_orgname" ]; then
+        echo "Arguments manquants: context et username_or_orgname requis" >&2
+        show_help
+        exit 1
+    fi
+    
+    # Valider la configuration
+    if ! validate_all_params "$context" "$username_or_orgname" "$DEST_DIR" "$BRANCH" "$FILTER" "$DEPTH" "$PARALLEL_JOBS" "$TIMEOUT_CUSTOM"; then
+        log_error "Validation des paramètres échouée"
+        exit 1
+    fi
+    
+    # Exécuter le script principal
+    main "$@"
+fi
