@@ -1,4 +1,8 @@
 #!/bin/bash
+
+# Configuration de sécurité Bash
+set -euo pipefail
+
 # lib/state/state.sh - Module de gestion d'état et reprise
 # Gère la sauvegarde et le chargement de l'état d'exécution
 

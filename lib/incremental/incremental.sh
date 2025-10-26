@@ -1,4 +1,8 @@
 #!/bin/bash
+
+# Configuration de sécurité Bash
+set -euo pipefail
+
 # lib/incremental/incremental.sh - Module de mode incrémental
 # Gère le traitement uniquement des dépôts modifiés
 

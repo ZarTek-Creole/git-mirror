@@ -1,4 +1,8 @@
 #!/bin/bash
+
+# Configuration de sécurité Bash
+set -euo pipefail
+
 # lib/filters/filters.sh - Module de filtrage des dépôts
 # Gère l'exclusion et l'inclusion de dépôts par patterns
 

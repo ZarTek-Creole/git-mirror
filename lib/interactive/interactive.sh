@@ -1,4 +1,8 @@
 #!/bin/bash
+
+# Configuration de sécurité Bash
+set -euo pipefail
+
 # lib/interactive/interactive.sh - Module d'interface interactive
 # Gère les modes interactif et non-interactif
 

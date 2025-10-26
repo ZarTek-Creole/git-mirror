@@ -1,4 +1,8 @@
 #!/bin/bash
+
+# Configuration de sécurité Bash
+set -euo pipefail
+
 # lib/utils/profiling.sh - Module de profiling de performance
 # Aide à analyser les performances et identifier les bottlenecks
 

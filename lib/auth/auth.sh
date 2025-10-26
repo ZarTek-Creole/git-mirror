@@ -1,4 +1,8 @@
 #!/bin/bash
+
+# Configuration de sécurité Bash
+set -euo pipefail
+
 # lib/auth/auth.sh - Module d'authentification GitHub
 # Gère l'authentification via Token GitHub, SSH ou mode public
 

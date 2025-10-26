@@ -1,4 +1,8 @@
 #!/bin/bash
+
+# Configuration de sécurité Bash
+set -euo pipefail
+
 # lib/api/github_api.sh - Module d'API GitHub
 # Gère les appels API avec cache, rate limiting et pagination
 

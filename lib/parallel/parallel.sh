@@ -1,4 +1,8 @@
 #!/bin/bash
+
+# Configuration de sécurité Bash
+set -euo pipefail
+
 # lib/parallel/parallel.sh - Module de parallélisation
 # Gère l'exécution parallèle des opérations Git avec GNU parallel
 
