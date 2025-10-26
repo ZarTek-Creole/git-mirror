@@ -74,20 +74,32 @@ validate_destination() {
         return 1
     fi
     
-    # Vérifier que le chemin est absolu ou relatif valide
+    # Si le répertoire existe déjà, vérifier qu'il est writable
+    if [ -d "$dest_dir" ]; then
+        if [ ! -w "$dest_dir" ]; then
+            log_error "Répertoire non accessible en écriture: $dest_dir"
+            return 1
+        fi
+        return 0
+    fi
+    
+    # Sinon, vérifier que le parent existe et est writable
     if [[ "$dest_dir" =~ ^/ ]]; then
         # Chemin absolu
         local parent_dir
         parent_dir=$(dirname "$dest_dir")
         if [ ! -d "$parent_dir" ]; then
+            log_error "Répertoire parent inexistant: $parent_dir"
             return 1
         fi
         if [ ! -w "$parent_dir" ]; then
+            log_error "Répertoire parent non accessible en écriture: $parent_dir"
             return 1
         fi
     else
         # Chemin relatif - vérifier le répertoire courant
         if [ ! -w "." ]; then
+            log_error "Répertoire courant non accessible en écriture"
             return 1
         fi
     fi
