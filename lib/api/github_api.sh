@@ -22,9 +22,7 @@ api_check_rate_limit() {
     headers=$(auth_get_headers "$GITHUB_AUTH_METHOD")
     
     local response
-    response=$(eval "curl -s $headers -H \"Accept: application/vnd.github.v3+json\" \"$API_BASE_URL/rate_limit\"" 2>/dev/null)
-    
-    if [ $? -ne 0 ]; then
+    if ! response=$(eval "curl -s $headers -H \"Accept: application/vnd.github.v3+json\" \"$API_BASE_URL/rate_limit\"" 2>/dev/null); then
         log_warning "Impossible de vérifier les limites de taux API"
         return 1
     fi
@@ -62,9 +60,7 @@ api_wait_rate_limit() {
     headers=$(auth_get_headers "$GITHUB_AUTH_METHOD")
     
     local response
-    response=$(eval "curl -s $headers -H \"Accept: application/vnd.github.v3+json\" \"$API_BASE_URL/rate_limit\"" 2>/dev/null)
-    
-    if [ $? -ne 0 ]; then
+    if ! response=$(eval "curl -s $headers -H \"Accept: application/vnd.github.v3+json\" \"$API_BASE_URL/rate_limit\"" 2>/dev/null); then
         return 1
     fi
     
@@ -254,9 +250,7 @@ api_fetch_all_repos() {
         log_debug "Récupération page $page..."
         
         local response
-        response=$(api_fetch_with_cache "$url")
-        
-        if [ $? -ne 0 ]; then
+        if ! response=$(api_fetch_with_cache "$url"); then
             log_error "Échec de la récupération de la page $page"
             # Si nous avons des dépôts partiels, les retourner
             if [ "$all_repos" != "[]" ]; then
@@ -357,9 +351,7 @@ api_get_total_repos() {
     local url="$api_url?per_page=1&type=all"
     
     local response
-    response=$(api_fetch_with_cache "$url")
-    
-    if [ $? -ne 0 ]; then
+    if ! response=$(api_fetch_with_cache "$url"); then
         log_warning "Impossible de récupérer le nombre total de dépôts, utilisation de l'estimation par défaut"
         echo "100"
         return 0

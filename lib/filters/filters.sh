@@ -253,9 +253,7 @@ filters_validate_pattern() {
 
 # Fonction principale d'initialisation du module de filtrage
 filters_setup() {
-    filters_init
-    
-    if [ $? -ne 0 ]; then
+    if ! filters_init; then
         log_error "Échec de l'initialisation du module de filtrage"
         return 1
     fi

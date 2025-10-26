@@ -58,16 +58,16 @@ context=""
 username_or_orgname=""
 
 # Variables de fonctionnalités
-PARALLEL_ENABLED=false
-FILTER_ENABLED=false
-METRICS_ENABLED=false
-EXCLUDE_PATTERNS=()
-INCLUDE_PATTERNS=()
-EXCLUDE_FILE=""
-INCLUDE_FILE=""
-INTERACTIVE_MODE=false
-CONFIRM_MODE=false
-AUTO_YES=false
+export PARALLEL_ENABLED=false
+export FILTER_ENABLED=false
+export METRICS_ENABLED=false
+export EXCLUDE_PATTERNS=()
+export INCLUDE_PATTERNS=()
+export EXCLUDE_FILE=""
+export INCLUDE_FILE=""
+export INTERACTIVE_MODE=false
+export CONFIRM_MODE=false
+export AUTO_YES=false
 
 # Obtenir les informations du module configuration
 get_config_module_info() {

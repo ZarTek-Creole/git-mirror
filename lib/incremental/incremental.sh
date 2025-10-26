@@ -66,9 +66,7 @@ incremental_filter_updated() {
     
     # Convertir la date de synchronisation en timestamp Unix
     local last_sync_timestamp
-    last_sync_timestamp=$(date -d "$last_sync" +%s 2>/dev/null)
-    
-    if [ $? -ne 0 ]; then
+    if ! last_sync_timestamp=$(date -d "$last_sync" +%s 2>/dev/null); then
         log_warning "Impossible de parser la date de synchronisation, traitement de tous les dépôts"
         echo "$repos_json"
         return 0
@@ -91,9 +89,7 @@ incremental_filter_updated() {
         
         # Convertir la date de push en timestamp Unix
         local pushed_timestamp
-        pushed_timestamp=$(date -d "$pushed_at" +%s 2>/dev/null)
-        
-        if [ $? -eq 0 ] && [ "$pushed_timestamp" -gt "$last_sync_timestamp" ]; then
+        if pushed_timestamp=$(date -d "$pushed_at" +%s 2>/dev/null) && [ "$pushed_timestamp" -gt "$last_sync_timestamp" ]; then
             filtered_repos=$(echo "$filtered_repos" | jq ". + [$repo]")
             updated_count=$((updated_count + 1))
             log_debug "Dépôt modifié: $repo_name (pushed_at: $pushed_at)"
@@ -121,9 +117,7 @@ incremental_is_repo_updated() {
     pushed_timestamp=$(date -d "$pushed_at" +%s 2>/dev/null)
     
     local last_sync_timestamp
-    last_sync_timestamp=$(date -d "$last_sync" +%s 2>/dev/null)
-    
-    if [ $? -ne 0 ] || [ -z "$pushed_timestamp" ] || [ -z "$last_sync_timestamp" ]; then
+    if ! last_sync_timestamp=$(date -d "$last_sync" +%s 2>/dev/null) || [ -z "$pushed_timestamp" ] || [ -z "$last_sync_timestamp" ]; then
         log_warning "Impossible de comparer les dates pour $repo_name, traitement du dépôt"
         return 0
     fi
@@ -190,9 +184,7 @@ incremental_show_summary() {
 
 # Fonction principale d'initialisation du module incrémental
 incremental_setup() {
-    incremental_init
-    
-    if [ $? -ne 0 ]; then
+    if ! incremental_init; then
         log_error "Échec de l'initialisation du module incrémental"
         return 1
     fi

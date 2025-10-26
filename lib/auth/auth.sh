@@ -82,11 +82,9 @@ auth_validate_token() {
     
     # Tester le token avec une requête API simple
     local response
-    response=$(curl -s -H "Authorization: token $token" \
+    if ! response=$(curl -s -H "Authorization: token $token" \
                    -H "Accept: application/vnd.github.v3+json" \
-                   "https://api.github.com/user" 2>/dev/null)
-    
-    if [ $? -ne 0 ]; then
+                   "https://api.github.com/user" 2>/dev/null); then
         log_error "Impossible de valider le token GitHub (erreur réseau)"
         return 1
     fi
@@ -170,9 +168,7 @@ auth_transform_url() {
 # Initialise l'authentification et retourne la méthode utilisée
 auth_init() {
     local method
-    method=$(auth_detect_method 2>/dev/null)
-    
-    if [ $? -ne 0 ] || [ -z "$method" ]; then
+    if ! method=$(auth_detect_method 2>/dev/null) || [ -z "$method" ]; then
         return 1
     fi
     
@@ -205,9 +201,7 @@ auth_init() {
 # Fonction principale d'authentification
 auth_setup() {
     # Détecter et initialiser la méthode d'authentification
-    auth_init
-    
-    if [ $? -ne 0 ]; then
+    if ! auth_init; then
         log_error_stderr "Impossible d'initialiser l'authentification"
         return 1
     fi

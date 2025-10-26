@@ -277,7 +277,7 @@ parse_options() {
                 if [ $# -lt 2 ] || [ -z "$2" ] || [[ "$2" =~ ^- ]]; then
                     log_fatal "L'option --exclude-file nécessite un argument (fichier)"
                 fi
-                EXCLUDE_FILE="$2"
+                export EXCLUDE_FILE="$2"
                 shift 2
                 ;;
             --include)
@@ -291,7 +291,7 @@ parse_options() {
                 if [ $# -lt 2 ] || [ -z "$2" ] || [[ "$2" =~ ^- ]]; then
                     log_fatal "L'option --include-file nécessite un argument (fichier)"
                 fi
-                INCLUDE_FILE="$2"
+                export INCLUDE_FILE="$2"
                 shift 2
                 ;;
             --metrics)
@@ -303,15 +303,15 @@ parse_options() {
                 shift 2
                 ;;
             --interactive)
-                INTERACTIVE_MODE=true
+                export INTERACTIVE_MODE=true
                 shift
                 ;;
             --confirm)
-                CONFIRM_MODE=true
+                export CONFIRM_MODE=true
                 shift
                 ;;
             --yes|-y)
-                AUTO_YES=true
+                export AUTO_YES=true
                 shift
                 ;;
             -v|--verbose)
@@ -400,16 +400,19 @@ main() {
     
     # Nettoyer le token GitHub s'il existe (supprimer les espaces et newlines)
     if [ -n "${GITHUB_TOKEN:-}" ]; then
-        export GITHUB_TOKEN=$(echo "$GITHUB_TOKEN" | tr -d '[:space:]')
+        local cleaned_token
+        cleaned_token=$(echo "$GITHUB_TOKEN" | tr -d '[:space:]')
+        export GITHUB_TOKEN="$cleaned_token"
         log_debug "Token GitHub nettoyé (longueur: ${#GITHUB_TOKEN})"
     fi
     
     # Tentative d'obtention automatique du token via gh si non défini
     if [ -z "${GITHUB_TOKEN:-}" ] && command -v gh >/dev/null 2>&1; then
         local gh_token
-        gh_token=$(gh auth token 2>/dev/null)
-        if [ $? -eq 0 ] && [ -n "$gh_token" ]; then
-            export GITHUB_TOKEN=$(echo "$gh_token" | tr -d '[:space:]')
+        if gh_token=$(gh auth token 2>/dev/null) && [ -n "$gh_token" ]; then
+            local cleaned_token
+            cleaned_token=$(echo "$gh_token" | tr -d '[:space:]')
+            export GITHUB_TOKEN="$cleaned_token"
             log_debug "Token GitHub obtenu automatiquement via 'gh auth token' (longueur: ${#GITHUB_TOKEN})"
         fi
     fi
@@ -514,10 +517,6 @@ main() {
         fi
     fi
     
-    # Obtenir les headers d'authentification pour les appels API
-    local auth_headers
-    auth_headers=$(auth_get_headers "$GITHUB_AUTH_METHOD")
-    
     # Calculer le nombre total de dépôts
     if [ "$SKIP_COUNT" = true ]; then
         log_info "Calcul du nombre total de dépôts ignoré (--skip-count activé)"
@@ -620,9 +619,7 @@ main() {
         
         # Créer une fonction wrapper pour parallel
         _process_repo_wrapper() {
-            # Initialiser les variables d'environnement avec des valeurs par défaut
-            local verbose_level="${VERBOSE_LEVEL:-0}"
-            local quiet_mode="${QUIET_MODE:-false}"
+            # Variables d'environnement héritées de l'environnement parent
             local filter_enabled="${FILTER_ENABLED:-false}"
             local github_auth="${GITHUB_AUTH_METHOD:-public}"
             

@@ -305,9 +305,7 @@ interactive_confirm_continue() {
 
 # Fonction principale d'initialisation du module interactif
 interactive_setup() {
-    interactive_init
-    
-    if [ $? -ne 0 ]; then
+    if ! interactive_init; then
         log_error "Échec de l'initialisation du module interactif"
         return 1
     fi

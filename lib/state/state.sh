@@ -233,9 +233,7 @@ state_show_summary() {
     fi
     
     local info
-    info=$(state_get_info)
-    
-    if [ $? -ne 0 ]; then
+    if ! info=$(state_get_info); then
         log_warning "Impossible de lire l'état précédent"
         return 1
     fi
@@ -255,9 +253,7 @@ state_show_summary() {
 
 # Fonction principale d'initialisation du module d'état
 state_setup() {
-    state_init
-    
-    if [ $? -ne 0 ]; then
+    if ! state_init; then
         log_error "Échec de l'initialisation du module d'état"
         return 1
     fi

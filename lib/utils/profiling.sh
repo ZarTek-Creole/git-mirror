@@ -26,8 +26,10 @@ profiling_stop() {
     
     if [ "$PROFILING_ENABLED" = "true" ] && [ -n "${PROFILING_TIMERS[$timer_name]:-}" ]; then
         local start_time="${PROFILING_TIMERS[$timer_name]}"
-        local end_time=$(date +%s.%N)
-        local duration=$(echo "$end_time - $start_time" | bc -l)
+        local end_time
+        end_time=$(date +%s.%N)
+        local duration
+        duration=$(echo "$end_time - $start_time" | bc -l)
         
         log_debug "[PROFILE] Arrêt: $timer_name (durée: ${duration}s)"
         
