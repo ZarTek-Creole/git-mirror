@@ -144,38 +144,36 @@ validate_filter() {
     esac
 }
 
-# Validation de la profondeur
-validate_depth() {
-    local depth="$1"
+# Fonction générique de validation numérique avec plage
+_validate_numeric_range() {
+    local value="$1"
+    local min="$2"
+    local max="$3"
+    local param_name="$4"
     
-    # Vérifier que c'est un nombre positif
-    if ! [[ "$depth" =~ ^[0-9]+$ ]]; then
+    # Vérifier que c'est un nombre entier positif
+    if ! [[ "$value" =~ ^[0-9]+$ ]]; then
+        log_error "${param_name} doit être un nombre entier positif"
         return 1
     fi
     
-    # Vérifier la plage (1-1000)
-    if [ "$depth" -lt 1 ] || [ "$depth" -gt 1000 ]; then
+    # Vérifier la plage
+    if [ "$value" -lt "$min" ] || [ "$value" -gt "$max" ]; then
+        log_error "${param_name} doit être entre $min et $max (reçu: $value)"
         return 1
     fi
     
     return 0
 }
 
+# Validation de la profondeur
+validate_depth() {
+    _validate_numeric_range "$1" 1 1000 "depth"
+}
+
 # Validation du nombre de jobs parallèles
 validate_parallel_jobs() {
-    local jobs="$1"
-    
-    # Vérifier que c'est un nombre positif
-    if ! [[ "$jobs" =~ ^[0-9]+$ ]]; then
-        return 1
-    fi
-    
-    # Vérifier la plage (1-50)
-    if [ "$jobs" -lt 1 ] || [ "$jobs" -gt 50 ]; then
-        return 1
-    fi
-    
-    return 0
+    _validate_numeric_range "$1" 1 50 "parallel_jobs"
 }
 
 # Validation du timeout
@@ -189,11 +187,13 @@ validate_timeout() {
     
     # Vérifier que c'est un nombre positif
     if ! [[ "$timeout" =~ ^[0-9]+$ ]]; then
+        log_error "timeout doit être un nombre entier positif"
         return 1
     fi
     
     # Vérifier la plage (1-3600 secondes)
     if [ "$timeout" -lt 1 ] || [ "$timeout" -gt 3600 ]; then
+        log_error "timeout doit être entre 1 et 3600 secondes (reçu: $timeout)"
         return 1
     fi
     
@@ -213,46 +213,45 @@ validate_github_url() {
     fi
 }
 
-# Validation des permissions de fichier
-validate_file_permissions() {
-    local file_path="$1"
-    local expected_perms="${2:-644}"
+# Fonction générique de validation des permissions
+_validate_permissions() {
+    local path="$1"
+    local type="$2"  # "file" ou "dir"
+    local expected_perms="$3"
     
-    if [ ! -f "$file_path" ]; then
-        log_error "Fichier inexistant: $file_path"
-        return 1
+    # Vérifier l'existence selon le type
+    if [ "$type" = "file" ]; then
+        if [ ! -f "$path" ]; then
+            log_error "Fichier inexistant: $path"
+            return 1
+        fi
+    else
+        if [ ! -d "$path" ]; then
+            log_error "Répertoire inexistant: $path"
+            return 1
+        fi
     fi
     
+    # Vérifier les permissions
     local current_perms
-    current_perms=$(stat -c "%a" "$file_path" 2>/dev/null || echo "000")
+    current_perms=$(stat -c "%a" "$path" 2>/dev/null || echo "000")
     
     if [ "$current_perms" != "$expected_perms" ]; then
-        log_warning "Permissions incorrectes pour $file_path: $current_perms (attendu: $expected_perms)"
+        log_warning "Permissions incorrectes pour $path: $current_perms (attendu: $expected_perms)"
         # Ne pas échouer, juste avertir
     fi
     
     return 0
 }
 
+# Validation des permissions de fichier
+validate_file_permissions() {
+    _validate_permissions "$1" "file" "${2:-644}"
+}
+
 # Validation des permissions de répertoire
 validate_dir_permissions() {
-    local dir_path="$1"
-    local expected_perms="${2:-755}"
-    
-    if [ ! -d "$dir_path" ]; then
-        log_error "Répertoire inexistant: $dir_path"
-        return 1
-    fi
-    
-    local current_perms
-    current_perms=$(stat -c "%a" "$dir_path" 2>/dev/null || echo "000")
-    
-    if [ "$current_perms" != "$expected_perms" ]; then
-        log_warning "Permissions incorrectes pour $dir_path: $current_perms (attendu: $expected_perms)"
-        # Ne pas échouer, juste avertir
-    fi
-    
-    return 0
+    _validate_permissions "$1" "dir" "${2:-755}"
 }
 
 # Validation complète des paramètres
@@ -273,37 +272,45 @@ validate_all_params() {
         log_debug "Validation des paramètres: context=$context, username=$username, dest_dir=$dest_dir, branch=$branch, filter=$filter, depth=$depth, parallel_jobs=$parallel_jobs, timeout=$timeout"
     fi
     
-    # Valider chaque paramètre
+    # Valider chaque paramètre avec messages d'erreur explicites
     if ! validate_context "$context"; then
+        log_error "Contexte invalide: '$context' (attendu: 'users' ou 'orgs')"
         validation_failed=true
     fi
     
     if ! validate_username "$username"; then
+        log_error "Username invalide: '$username' (format: alphanumérique+tirets, max 39 caractères)"
         validation_failed=true
     fi
     
     if ! validate_destination "$dest_dir"; then
+        log_error "Répertoire de destination invalide: '$dest_dir' (vérifier existence et permissions)"
         validation_failed=true
     fi
     
     if ! validate_branch "$branch"; then
+        log_error "Nom de branche invalide: '$branch' (caractères interdits: ~ ^ : [ ] \\ .. @{ et ne doit pas finir par .)"
         validation_failed=true
     fi
     
     if ! validate_filter "$filter"; then
+        log_error "Filtre Git invalide: '$filter' (formats acceptés: blob:none, tree:0, sparse:oid=*)"
         validation_failed=true
     fi
     
     if ! validate_depth "$depth"; then
         validation_failed=true
+        # Message géré par _validate_numeric_range
     fi
     
     if ! validate_parallel_jobs "$parallel_jobs"; then
         validation_failed=true
+        # Message géré par _validate_numeric_range
     fi
     
     if ! validate_timeout "$timeout"; then
         validation_failed=true
+        # Message géré par validate_timeout()
     fi
     
     if [ "$validation_failed" = true ]; then
