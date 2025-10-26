@@ -99,7 +99,7 @@ log_success() {
 
 log_debug() {
     if [ "$VERBOSE_LEVEL" -ge 2 ] && [ "$QUIET_MODE" = false ]; then
-        _log_message "DEBUG" "$PURPLE" "$*"
+        _log_message "DEBUG" "$PURPLE" "$*" 2
     fi
 }
 
@@ -178,4 +178,4 @@ log_success_stderr() {
 }
 
 # Export des fonctions publiques
-export -f init_logger log_error log_warning log_info log_success log_debug log_trace log_dry_run log_fatal logger_status log_error_stderr log_warning_stderr log_debug_stderr log_info_stderr log_success_stderr
+export -f init_logger log_error log_warning log_info log_success log_debug log_trace log_dry_run log_fatal logger_status log_error_stderr log_warning_stderr log_debug_stderr log_info_stderr log_success_stderr _log_message

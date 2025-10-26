@@ -86,7 +86,7 @@ clone_repository() {
     git_opts="$git_opts --recurse-submodules"
     
     # Mode verbeux
-    if [ "$VERBOSE_LEVEL" -eq 0 ] && [ "$QUIET_MODE" = false ]; then
+    if [ "${VERBOSE_LEVEL:-0}" -eq 0 ] && [ "${QUIET_MODE:-false}" = false ]; then
         git_opts="$git_opts --quiet"
     fi
     
@@ -94,6 +94,9 @@ clone_repository() {
     local git_cmd="git clone $git_opts \"$repo_url\" \"$full_dest_path\""
     
     # Exécuter avec gestion d'erreurs
+    GIT_SUCCESS_COUNT=${GIT_SUCCESS_COUNT:-0}
+    GIT_FAILURE_COUNT=${GIT_FAILURE_COUNT:-0}
+    
     if _execute_git_command "$git_cmd" "clone"; then
         GIT_SUCCESS_COUNT=$((GIT_SUCCESS_COUNT + 1))
         log_success "Dépôt cloné avec succès: $repo_name"
@@ -129,7 +132,7 @@ update_repository() {
     
     # Récupérer les dernières modifications
     local git_cmd="git fetch --all --recurse-submodules"
-    if [ "$VERBOSE_LEVEL" -eq 0 ] && [ "$QUIET_MODE" = false ]; then
+    if [ "${VERBOSE_LEVEL:-0}" -eq 0 ] && [ "${QUIET_MODE:-false}" = false ]; then
         git_cmd="$git_cmd --quiet"
     fi
     
@@ -142,6 +145,7 @@ update_repository() {
         # Mettre à jour les submodules
         _update_submodules
         
+        GIT_SUCCESS_COUNT=${GIT_SUCCESS_COUNT:-0}
         GIT_SUCCESS_COUNT=$((GIT_SUCCESS_COUNT + 1))
         log_success "Dépôt mis à jour avec succès: $repo_name"
         
@@ -149,6 +153,7 @@ update_repository() {
         cd "$original_dir" || return 1
         return 0
     else
+        GIT_FAILURE_COUNT=${GIT_FAILURE_COUNT:-0}
         GIT_FAILURE_COUNT=$((GIT_FAILURE_COUNT + 1))
         log_error "Échec de la mise à jour: $repo_name"
         
@@ -204,20 +209,25 @@ _execute_git_command() {
     local operation="$2"
     local retry_count=0
     
+    # Initialiser GIT_OPERATIONS_COUNT si nécessaire
+    GIT_OPERATIONS_COUNT=${GIT_OPERATIONS_COUNT:-0}
     GIT_OPERATIONS_COUNT=$((GIT_OPERATIONS_COUNT + 1))
     
-    while [ $retry_count -lt "$MAX_GIT_RETRIES" ]; do
-        if timeout "$GIT_TIMEOUT" bash -c "$cmd"; then
+    local max_retries="${MAX_GIT_RETRIES:-3}"
+    local git_timeout="${GIT_TIMEOUT:-30}"
+    local retry_delay="${GIT_RETRY_DELAY:-2}"
+    while [ $retry_count -lt "$max_retries" ]; do
+        if timeout "$git_timeout" bash -c "$cmd"; then
             return 0
         else
             local exit_code=$?
             retry_count=$((retry_count + 1))
             
-            if [ $retry_count -lt "$MAX_GIT_RETRIES" ]; then
-                log_warning "Tentative $retry_count/$MAX_GIT_RETRIES échouée pour $operation, retry dans ${GIT_RETRY_DELAY}s..."
-                sleep "$GIT_RETRY_DELAY"
+            if [ $retry_count -lt "$max_retries" ]; then
+                log_warning "Tentative $retry_count/$max_retries échouée pour $operation, retry dans ${retry_delay}s..."
+                sleep "$retry_delay"
             else
-                log_error "Échec définitif après $MAX_GIT_RETRIES tentatives pour $operation"
+                log_error "Échec définitif après $max_retries tentatives pour $operation"
                 _handle_git_error "$exit_code" "$operation"
                 return 1
             fi
@@ -343,4 +353,4 @@ git_ops_setup() {
 }
 
 # Export des fonctions publiques
-export -f init_git_module clone_repository update_repository repository_exists get_current_branch get_last_commit clean_corrupted_repository get_git_stats git_ops_setup
+export -f init_git_module clone_repository update_repository repository_exists get_current_branch get_last_commit clean_corrupted_repository get_git_stats git_ops_setup _execute_git_command _configure_safe_directory _handle_git_error _update_submodules _update_branch

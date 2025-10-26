@@ -13,11 +13,22 @@ auth_detect_method() {
     
     # Vérifier si un token GitHub est disponible et valide
     if [ -n "${GITHUB_TOKEN:-}" ]; then
-        if auth_validate_token "$GITHUB_TOKEN" >/dev/null 2>&1; then
-            method="token"
-            log_debug_stderr "Token GitHub détecté et validé"
+        # Nettoyer le token (supprimer les espaces et les nouvelles lignes)
+        local clean_token
+        clean_token=$(echo "$GITHUB_TOKEN" | tr -d '[:space:]')
+        
+        # Vérifier le format basique du token
+        if [[ "$clean_token" =~ ^[a-f0-9]{40}$ ]] || [[ "$clean_token" =~ ^gh[opru]_[a-zA-Z0-9]{36}$ ]]; then
+            # Format valide, tester avec l'API
+            if auth_validate_token "$clean_token" >/dev/null 2>&1; then
+                method="token"
+                log_debug_stderr "Token GitHub détecté et validé"
+            else
+                log_debug_stderr "Token GitHub présent (format valide) mais validation API échouée, essai mode public"
+                method="public"
+            fi
         else
-            log_warning_stderr "Token GitHub présent mais invalide, utilisation du mode public"
+            log_debug_stderr "Token GitHub présent mais format invalide, utilisation du mode public"
             method="public"
         fi
     # Vérifier si une clé SSH est configurée

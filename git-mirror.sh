@@ -31,12 +31,17 @@ source "$LIB_DIR/metrics/metrics.sh"
 source "$LIB_DIR/interactive/interactive.sh"
 source "$LIB_DIR/state/state.sh"
 source "$LIB_DIR/incremental/incremental.sh"
+source "$LIB_DIR/utils/profiling.sh"
 
 # Variables globales
 INTERRUPTED=false
 success_repos=0
 failed_repos=0
 total_repos=0
+counter=0
+
+# Réinitialiser PROFILING_ENABLED après le chargement du module (pour éviter readonly)
+PROFILING_ENABLED="${PROFILING_ENABLED:-false}"
 
 # Fonction d'aide
 show_help() {
@@ -69,6 +74,7 @@ show_help() {
     echo "  -v, --verbose            Mode verbeux (peut être utilisé plusieurs fois: -vv, -vvv)"
     echo "  -q, --quiet              Mode silencieux (sortie minimale)"
     echo "  --dry-run                Simulation sans actions réelles"
+    echo "  --profile                Active le profiling de performance"
     echo "  --skip-count             Éviter le calcul du nombre total de dépôts (utile si limite API)"
     echo "  -h, --help               Afficher cette aide"
     echo ""
@@ -249,6 +255,7 @@ parse_options() {
                     log_fatal "L'option --parallel nécessite un argument (nombre de jobs)"
                 fi
                 PARALLEL_JOBS="$2"
+                PARALLEL_ENABLED=true  # Activer la parallélisation
                 shift 2
                 ;;
             --resume)
@@ -319,6 +326,10 @@ parse_options() {
                 DRY_RUN=true
                 shift
                 ;;
+            --profile)
+                PROFILING_ENABLED=true
+                shift
+                ;;
             --skip-count)
                 SKIP_COUNT=true
                 shift
@@ -381,6 +392,29 @@ main() {
     # Initialiser les modules
     init_logger "$VERBOSE" "$QUIET" "$DRY_RUN" true
     init_config
+    
+    # Activer le profiling si demandé
+    if [ "${PROFILING_ENABLED:-false}" = "true" ]; then
+        profiling_enable
+    fi
+    
+    # Nettoyer le token GitHub s'il existe (supprimer les espaces et newlines)
+    if [ -n "${GITHUB_TOKEN:-}" ]; then
+        export GITHUB_TOKEN=$(echo "$GITHUB_TOKEN" | tr -d '[:space:]')
+        log_debug "Token GitHub nettoyé (longueur: ${#GITHUB_TOKEN})"
+    fi
+    
+    # Tentative d'obtention automatique du token via gh si non défini
+    if [ -z "${GITHUB_TOKEN:-}" ] && command -v gh >/dev/null 2>&1; then
+        local gh_token
+        gh_token=$(gh auth token 2>/dev/null)
+        if [ $? -eq 0 ] && [ -n "$gh_token" ]; then
+            export GITHUB_TOKEN=$(echo "$gh_token" | tr -d '[:space:]')
+            log_debug "Token GitHub obtenu automatiquement via 'gh auth token' (longueur: ${#GITHUB_TOKEN})"
+        fi
+    fi
+    
+    log_debug "Token GitHub final: ${GITHUB_TOKEN:+présent} ${GITHUB_TOKEN:-absent}"
     
     # Initialiser l'authentification
     if ! auth_setup; then
@@ -446,6 +480,11 @@ main() {
     if ! incremental_setup; then
         log_error "Échec de l'initialisation du mode incrémental"
         exit 1
+    fi
+    
+    # Activer le profiling si demandé
+    if [ "$PROFILING_ENABLED" = "true" ]; then
+        profiling_enable
     fi
     
     # Vérifier les dépendances
@@ -534,55 +573,143 @@ main() {
         log_dry_run "Création du répertoire de destination: $DEST_DIR"
     fi
     
-    # Traitement des dépôts
-    local page_number=1
-    local counter=$((success_repos + failed_repos + 1))
-
-while [ $counter -le "$total_repos" ]; do
-        log_info "Récupération des dépôts (page $page_number)..."
+    # Traitement des dépôts (api_fetch_all_repos récupère TOUTES les pages d'un coup)
+    log_info "Récupération des dépôts..."
+    
+    local repos_json
+    repos_json=$(api_fetch_all_repos "$context" "$username_or_orgname")
+    
+    local api_exit_code=$?
+    
+    if [ $api_exit_code -ne 0 ]; then
+        log_error "Échec de la récupération des dépôts (code: $api_exit_code)"
+        exit 1
+    fi
+    
+    if [ -z "$repos_json" ]; then
+        log_error "Réponse API vide"
+        exit 1
+    fi
+    
+    # Vérifier que c'est un array JSON valide
+    if ! echo "$repos_json" | jq -e 'type == "array"' >/dev/null 2>&1; then
+        log_error "Réponse API invalide"
+        exit 1
+    fi
+    
+    # En mode incrémental, filtrer les dépôts modifiés
+    local repos_to_process
+    if [ "$INCREMENTAL" = true ]; then
+        local last_sync
+        last_sync=$(cache_get_last_sync "$context" "$username_or_orgname")
+        repos_to_process=$(echo "$repos_json" | jq -r --arg last_sync "$last_sync" '
+            .[] | select(.pushed_at > $last_sync) | .clone_url
+        ')
         
-        local repos_json
-        repos_json=$(api_fetch_all_repos "$context" "$username_or_orgname")
+        local filtered_count
+        filtered_count=$(echo "$repos_to_process" | wc -l)
+        log_info "Mode incrémental: $filtered_count dépôts modifiés depuis $last_sync"
+    else
+        repos_to_process=$(echo "$repos_json" | jq -r '.[].clone_url')
+    fi
+    
+    # Traiter les dépôts (séquentiel ou parallèle)
+    if [ "$PARALLEL_ENABLED" = "true" ] && [ "$PARALLEL_JOBS" -gt 1 ] && [ "$DRY_RUN" = false ]; then
+        # Mode parallèle avec GNU parallel
+        log_info "Traitement parallèle de $(echo "$repos_to_process" | wc -l) dépôts avec $PARALLEL_JOBS jobs"
         
-        local api_exit_code=$?
-        if [ $api_exit_code -ne 0 ] || [ -z "$repos_json" ]; then
-            log_error "Échec de la récupération de la page $page_number"
-		break
-	fi
-        
-        # Vérifier que repos_json contient du JSON valide
-        if [ "$repos_json" = "0" ] || [ -z "$repos_json" ] || ! echo "$repos_json" | jq empty 2>/dev/null; then
-            log_error "Réponse API invalide pour la page $page_number"
-            break
-        fi
-        
-        # En mode incrémental, filtrer les dépôts modifiés
-        local repos_to_process
-        if [ "$INCREMENTAL" = true ]; then
-            local last_sync
-            last_sync=$(cache_get_last_sync "$context" "$username_or_orgname")
-            repos_to_process=$(echo "$repos_json" | jq -r --arg last_sync "$last_sync" '
-                .[] | select(.pushed_at > $last_sync) | .clone_url
-            ')
+        # Créer une fonction wrapper pour parallel
+        _process_repo_wrapper() {
+            # Initialiser les variables d'environnement avec des valeurs par défaut
+            local verbose_level="${VERBOSE_LEVEL:-0}"
+            local quiet_mode="${QUIET_MODE:-false}"
+            local filter_enabled="${FILTER_ENABLED:-false}"
+            local github_auth="${GITHUB_AUTH_METHOD:-public}"
             
-            local filtered_count
-            filtered_count=$(echo "$repos_to_process" | wc -l)
-            log_info "Mode incrémental: $filtered_count dépôts modifiés depuis $last_sync"
-        else
-            repos_to_process=$(echo "$repos_json" | jq -r '.[].clone_url')
-        fi
+            local repo_url="$1"
+            local repo_name
+            repo_name=$(basename "$repo_url" .git)
+            local repo_full_name
+            repo_full_name=$(echo "$repo_url" | sed 's|https://github.com/||' | sed 's|.git||')
+            
+            # Vérifier le filtrage
+            if [ "$filter_enabled" = "true" ] && ! filters_should_process "$repo_name" "$repo_full_name"; then
+                echo "FILTERED:$repo_name"
+                return 0
+            fi
+            
+            # Transformer l'URL selon la méthode d'authentification
+            local final_url
+            if [ "$github_auth" = "ssh" ]; then
+                final_url=$(auth_transform_url "$repo_url" "ssh")
+            else
+                final_url="$repo_url"
+            fi
+            
+            local repo_path="$DEST_DIR/$repo_name"
+            
+            if repository_exists "$repo_path"; then
+                if update_repository "$repo_path" "$BRANCH"; then
+                    echo "SUCCESS:$repo_name"
+                else
+                    echo "FAILED:$repo_name"
+                fi
+            else
+                if clone_repository "$final_url" "$DEST_DIR" "$BRANCH" "$DEPTH" "$FILTER" "$SINGLE_BRANCH" "$NO_CHECKOUT"; then
+                    echo "SUCCESS:$repo_name"
+                else
+                    echo "FAILED:$repo_name"
+                fi
+            fi
+        }
         
-        # Traiter chaque dépôt
+        export -f _process_repo_wrapper repository_exists update_repository clone_repository
+        export -f auth_transform_url filters_should_process log_info log_success log_error log_debug _log_message
+        export -f _execute_git_command _configure_safe_directory _update_submodules _update_branch
+        export DEST_DIR BRANCH DEPTH FILTER SINGLE_BRANCH NO_CHECKOUT GITHUB_AUTH_METHOD VERBOSE_LEVEL QUIET_MODE
+        export FILTER_ENABLED=${FILTER_ENABLED:-false}
+        export DRY_RUN=${DRY_RUN:-false}
+        
+        # Exécuter en parallèle
+        parallel_results=$(echo "$repos_to_process" | parallel -j "$PARALLEL_JOBS" --timeout "$PARALLEL_TIMEOUT" _process_repo_wrapper {})
+        
+        # Compter les succès et échecs de manière sécurisée
+        local temp_success temp_failed
+        temp_success=$(echo "$parallel_results" | grep -c "SUCCESS:" 2>/dev/null || echo "0")
+        temp_failed=$(echo "$parallel_results" | grep -c "FAILED:" 2>/dev/null || echo "0")
+        
+        success_from_parallel=$(echo "$temp_success" | tr -d '\n\r ')
+        failed_from_parallel=$(echo "$temp_failed" | tr -d '\n\r ')
+        
+        # Valeurs par défaut si vides
+        success_from_parallel=${success_from_parallel:-0}
+        failed_from_parallel=${failed_from_parallel:-0}
+        
+        success_repos=$((success_repos + success_from_parallel))
+        failed_repos=$((failed_repos + failed_from_parallel))
+        counter=$((counter + success_from_parallel + failed_from_parallel))
+    else
+        # Mode séquentiel (par défaut ou dry-run)
         while IFS= read -r repo_url; do
             if [ -n "$repo_url" ] && [ "$repo_url" != "null" ]; then
                 local repo_name
                 repo_name=$(basename "$repo_url" .git)
+                local repo_full_name
+                repo_full_name=$(echo "$repo_url" | sed 's|https://github.com/||' | sed 's|.git||')
+                
+                # Vérifier le filtrage
+                if [ "$FILTER_ENABLED" = "true" ] && ! filters_should_process "$repo_name" "$repo_full_name"; then
+                    log_debug "Dépôt filtré: $repo_name"
+                    counter=$((counter + 1))
+                    continue
+                fi
+                
                 log_info "Traitement du dépôt $counter/$total_repos: $repo_name"
                 
                 # Transformer l'URL selon la méthode d'authentification
                 local final_url
-                if [ "$AUTH_METHOD" = "ssh" ]; then
-                    final_url=$(transform_to_ssh_url "$repo_url")
+                if [ "$GITHUB_AUTH_METHOD" = "ssh" ]; then
+                    final_url=$(auth_transform_url "$repo_url" "ssh")
                 else
                     final_url="$repo_url"
                 fi
@@ -618,11 +745,9 @@ while [ $counter -le "$total_repos" ]; do
                 if [ $((counter % 10)) -eq 0 ]; then
                     _save_state
                 fi
-            fi
-        done <<< "$repos_to_process"
-
-	page_number=$((page_number + 1))
-done
+                fi
+            done <<< "$repos_to_process"
+        fi
     
     # Résumé final
     log_info "=== Résumé de la synchronisation ==="
@@ -654,6 +779,12 @@ done
         get_filter_stats
         echo ""
         get_interactive_stats
+    fi
+    
+    # Afficher le résumé de profiling si activé
+    if [ "${PROFILING_ENABLED:-false}" = "true" ]; then
+        echo ""
+        profiling_summary
     fi
     
     # Exporter les métriques

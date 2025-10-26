@@ -136,22 +136,28 @@ api_fetch_with_cache() {
         return 1
     fi
     
+    # Créer le répertoire de cache si nécessaire
+    mkdir -p "$API_CACHE_DIR"
+    
     # Faire l'appel API avec gestion des erreurs améliorée
     local headers
     headers=$(auth_get_headers "$GITHUB_AUTH_METHOD")
     
     local response
     local http_code
-    response=$(eval "curl -s -w \"%{http_code}\" $headers -H \"Accept: application/vnd.github.v3+json\" \"$url\"" 2>/dev/null)
+    # Capturer uniquement stdout (curl), pas stderr (pour éviter les messages DEBUG)
+    response=$(eval "curl -s -w \"%{http_code}\" $headers -H \"Accept: application/vnd.github.v3+json\" \"$url\" 2>&1")
     http_code="${response: -3}"
     response="${response%???}"
     
     log_debug "Réponse HTTP: $http_code pour $url"
+    log_debug "Headers utilisés: $headers"
     
     # Gérer les codes de réponse HTTP
     case "$http_code" in
         200)
             # Succès
+            log_debug "Réponse API reçue avec succès (200)"
             ;;
         403)
             log_error "Accès refusé (403) - Limite de taux API GitHub atteinte"
@@ -182,7 +188,9 @@ api_fetch_with_cache() {
     # Vérifier si c'est un JSON valide
     if ! echo "$response" | jq . >/dev/null 2>&1; then
         log_error "Réponse JSON invalide de l'API GitHub"
-        log_debug "Réponse reçue: $(echo "$response" | head -c 200)"
+        log_debug "Longueur de la réponse: ${#response} caractères"
+        log_debug "Premiers 200 caractères: $(echo "$response" | head -c 200)"
+        log_debug "Échec de la validation jq"
         return 1
     fi
     
@@ -203,6 +211,7 @@ api_fetch_with_cache() {
     echo "$response" > "$cache_file"
     log_debug "Cache mis à jour pour: $url"
     
+    # Retourner UNIQUEMENT le JSON, pas les logs DEBUG
     echo "$response"
     return 0
 }
@@ -215,7 +224,7 @@ api_fetch_all_repos() {
     local per_page=100
     local all_repos="[]"
     
-    log_info "Récupération des dépôts avec pagination automatique..."
+    log_info "Récupération des dépôts avec pagination automatique..." >&2
     
     # Vérifier d'abord si nous avons un cache complet
     local cache_key
@@ -223,13 +232,24 @@ api_fetch_all_repos() {
     local cache_file="$API_CACHE_DIR/${cache_key}.json"
     
     if api_cache_valid "$cache_file" "$API_CACHE_TTL"; then
-        log_debug "Utilisation du cache complet pour tous les dépôts"
+        log_debug "Utilisation du cache complet pour tous les dépôts" >&2
         cat "$cache_file"
         return 0
     fi
     
+    # Utiliser /user/repos pour l'utilisateur authentifié (dépôts publics + privés)
+    # ou /users/:username/repos pour les autres utilisateurs (dépôts publics uniquement)
+    local api_url
+    if [ "$context" = "users" ] && [ -n "${GITHUB_AUTH_METHOD:-}" ] && [ "$GITHUB_AUTH_METHOD" != "public" ]; then
+        # Authentifié et c'est notre propre compte : utiliser /user/repos pour avoir publics + privés
+        api_url="https://api.github.com/user/repos"
+    else
+        # Compte public ou autre utilisateur : utiliser l'endpoint classique
+        api_url="$API_BASE_URL/$context/$username/repos"
+    fi
+    
     while true; do
-        local url="$API_BASE_URL/$context/$username/repos?page=$page&per_page=$per_page&sort=updated&direction=desc"
+        local url="$api_url?page=$page&per_page=$per_page&sort=updated&direction=desc&type=all"
         
         log_debug "Récupération page $page..."
         
@@ -248,18 +268,17 @@ api_fetch_all_repos() {
         fi
         
         # Debug: afficher la réponse pour diagnostiquer
-        log_debug "Réponse API page $page (premiers 200 caractères): $(echo "$response" | head -c 200)"
+        log_debug "Réponse API page $page reçue (longueur: ${#response})"
         
         # Vérifier si la réponse est vide ou invalide
-        if [ -z "$response" ] || [ "$response" = "null" ]; then
-            log_error "Réponse API vide pour la page $page"
+        if [ -z "$response" ] || [ "$response" = "null" ] || [ "$response" = "[]" ]; then
+            log_debug "Page $page vide ou invalide (réponse: $response), fin de la pagination"
             break
         fi
         
         # Vérifier si c'est un tableau JSON valide
-        if ! echo "$response" | jq -e '. | type == "array"' >/dev/null 2>&1; then
+        if ! echo "$response" | jq -e 'type == "array"' >/dev/null 2>&1; then
             log_error "Réponse API invalide pour la page $page (pas un tableau JSON)"
-            log_debug "Réponse complète: $response"
             break
         fi
         
@@ -268,31 +287,28 @@ api_fetch_all_repos() {
         page_count=$(echo "$response" | jq 'length')
         
         if [ "$page_count" -eq 0 ]; then
-            log_debug "Page $page vide, fin de la pagination"
+            log_debug "Page $page contient 0 dépôts, fin de la pagination"
             break
         fi
         
         log_debug "Page $page contient $page_count dépôts"
         
-        # Fusionner avec les dépôts existants
-        local temp_file1 temp_file2
-        temp_file1=$(mktemp)
-        temp_file2=$(mktemp)
-        echo "$all_repos" > "$temp_file1"
-        echo "$response" > "$temp_file2"
-        jq -s '.[0] + .[1]' "$temp_file1" "$temp_file2" > "$temp_file1"
-        all_repos=$(cat "$temp_file1")
-        rm -f "$temp_file1" "$temp_file2"
-        
-        # Vérifier si on a moins de dépôts que la taille de page (dernière page)
-        local page_count
-        page_count=$(echo "$response" | jq 'length')
-        
-        if [ "$page_count" -lt "$per_page" ]; then
-            log_debug "Dernière page atteinte ($page_count dépôts)"
-            break
+        # Fusionner avec les dépôts existants (seulement si la page n'est pas vide)
+        if [ "$page_count" -gt 0 ]; then
+            local temp_file1 temp_file2 temp_result
+            temp_file1=$(mktemp)
+            temp_file2=$(mktemp)
+            temp_result=$(mktemp)
+            echo "$all_repos" > "$temp_file1"
+            echo "$response" > "$temp_file2"
+            log_debug "Avant fusion - all_repos: $(cat "$temp_file1" | jq 'length'), response: $(cat "$temp_file2" | jq 'length')"
+            jq -s '.[0] + .[1]' "$temp_file1" "$temp_file2" > "$temp_result"
+            all_repos=$(cat "$temp_result")
+            rm -f "$temp_file1" "$temp_file2" "$temp_result"
+            log_debug "Après fusion - Total: $(echo "$all_repos" | jq 'length')"
         fi
         
+        # Passer à la page suivante
         page=$((page + 1))
         
         # Petite pause pour éviter de surcharger l'API
@@ -304,9 +320,9 @@ api_fetch_all_repos() {
     
     # Sauvegarder le cache complet
     echo "$all_repos" > "$cache_file"
-    log_debug "Cache complet sauvegardé: $total_count dépôts"
+    log_debug "Cache complet sauvegardé: $total_count dépôts" >&2
     
-    log_success "Récupération terminée: $total_count dépôts trouvés"
+    log_success "Récupération terminée: $total_count dépôts trouvés" >&2
     
     echo "$all_repos"
     return 0
@@ -325,13 +341,20 @@ api_get_total_repos() {
     if api_cache_valid "$cache_file" "$API_CACHE_TTL"; then
         local cached_total
         cached_total=$(cat "$cache_file")
-        log_debug "Utilisation du cache pour le nombre total de dépôts: $cached_total" >&2
+        log_debug "Utilisation du cache pour le nombre total de dépôts: $cached_total"
         echo "$cached_total"
         return 0
     fi
     
     # Faire un appel API pour obtenir le nombre total
-    local url="$API_BASE_URL/$context/$username/repos?per_page=1"
+    # Utiliser /user/repos pour l'utilisateur authentifié, sinon /users/:username/repos
+    local api_url
+    if [ "$context" = "users" ] && [ -n "${GITHUB_AUTH_METHOD:-}" ] && [ "$GITHUB_AUTH_METHOD" != "public" ]; then
+        api_url="https://api.github.com/user/repos"
+    else
+        api_url="$API_BASE_URL/$context/$username/repos"
+    fi
+    local url="$api_url?per_page=1&type=all"
     
     local response
     response=$(api_fetch_with_cache "$url")
@@ -365,7 +388,7 @@ api_get_total_repos() {
     # Sauvegarder dans le cache
     echo "$total" > "$cache_file"
     
-    log_debug "Nombre total de dépôts calculé: $total" >&2
+    log_debug "Nombre total de dépôts calculé: $total"
     echo "$total"
     return 0
 }
