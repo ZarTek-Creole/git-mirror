@@ -26,9 +26,17 @@ api_check_rate_limit() {
     headers=$(auth_get_headers "$GITHUB_AUTH_METHOD")
     
     local response
-    if ! response=$(eval "curl -s $headers -H \"Accept: application/vnd.github.v3+json\" \"$API_BASE_URL/rate_limit\"" 2>/dev/null); then
-        log_warning "Impossible de vérifier les limites de taux API"
-        return 1
+    # SÉCURITÉ : Utilisation directe de curl SANS eval
+    if [ -n "$headers" ]; then
+        if ! response=$(curl -s "$headers" -H "Accept: application/vnd.github.v3+json" "$API_BASE_URL/rate_limit" 2>/dev/null); then
+            log_warning "Impossible de vérifier les limites de taux API"
+            return 1
+        fi
+    else
+        if ! response=$(curl -s -H "Accept: application/vnd.github.v3+json" "$API_BASE_URL/rate_limit" 2>/dev/null); then
+            log_warning "Impossible de vérifier les limites de taux API"
+            return 1
+        fi
     fi
     
     local remaining
@@ -64,8 +72,15 @@ api_wait_rate_limit() {
     headers=$(auth_get_headers "$GITHUB_AUTH_METHOD")
     
     local response
-    if ! response=$(eval "curl -s $headers -H \"Accept: application/vnd.github.v3+json\" \"$API_BASE_URL/rate_limit\"" 2>/dev/null); then
-        return 1
+    # SÉCURITÉ : Utilisation directe de curl SANS eval
+    if [ -n "$headers" ]; then
+        if ! response=$(curl -s "$headers" -H "Accept: application/vnd.github.v3+json" "$API_BASE_URL/rate_limit" 2>/dev/null); then
+            return 1
+        fi
+    else
+        if ! response=$(curl -s -H "Accept: application/vnd.github.v3+json" "$API_BASE_URL/rate_limit" 2>/dev/null); then
+            return 1
+        fi
     fi
     
     local remaining
@@ -145,8 +160,12 @@ api_fetch_with_cache() {
     
     local response
     local http_code
-    # Capturer uniquement stdout (curl), pas stderr (pour éviter les messages DEBUG)
-    response=$(eval "curl -s -w \"%{http_code}\" $headers -H \"Accept: application/vnd.github.v3+json\" \"$url\" 2>&1")
+    # SÉCURITÉ : Utilisation directe de curl SANS eval
+    if [ -n "$headers" ]; then
+        response=$(curl -s -w "%{http_code}" "$headers" -H "Accept: application/vnd.github.v3+json" "$url" 2>&1)
+    else
+        response=$(curl -s -w "%{http_code}" -H "Accept: application/vnd.github.v3+json" "$url" 2>&1)
+    fi
     http_code="${response: -3}"
     response="${response%???}"
     
@@ -299,7 +318,7 @@ api_fetch_all_repos() {
             temp_result=$(mktemp)
             echo "$all_repos" > "$temp_file1"
             echo "$response" > "$temp_file2"
-            log_debug "Avant fusion - all_repos: $(cat "$temp_file1" | jq 'length'), response: $(cat "$temp_file2" | jq 'length')"
+            log_debug "Avant fusion - all_repos: $(jq 'length' "$temp_file1"), response: $(jq 'length' "$temp_file2")"
             jq -s '.[0] + .[1]' "$temp_file1" "$temp_file2" > "$temp_result"
             all_repos=$(cat "$temp_result")
             rm -f "$temp_file1" "$temp_file2" "$temp_result"
@@ -366,8 +385,14 @@ api_get_total_repos() {
     headers=$(auth_get_headers "$GITHUB_AUTH_METHOD")
     
     local link_header
-    link_header=$(eval "curl -s -I $headers -H \"Accept: application/vnd.github.v3+json\" \"$url\"" 2>/dev/null | \
-                  grep -i "link:" | cut -d' ' -f2-)
+    # SÉCURITÉ : Utilisation directe de curl SANS eval
+    if [ -n "$headers" ]; then
+        link_header=$(curl -s -I "$headers" -H "Accept: application/vnd.github.v3+json" "$url" 2>/dev/null | \
+                      grep -i "link:" | cut -d' ' -f2-)
+    else
+        link_header=$(curl -s -I -H "Accept: application/vnd.github.v3+json" "$url" 2>/dev/null | \
+                      grep -i "link:" | cut -d' ' -f2-)
+    fi
     
     local total=100  # Valeur par défaut
     
@@ -391,9 +416,7 @@ api_get_total_repos() {
 
 # Fonction principale d'initialisation du module API
 api_setup() {
-    api_init
-    
-    if [ $? -ne 0 ]; then
+    if ! api_init; then
         log_error "Échec de l'initialisation du module API"
         return 1
     fi
