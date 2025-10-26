@@ -2,7 +2,7 @@
 
 ## 📁 Organisation des Fichiers
 
-```
+```text
 git-mirror/
 ├── git-mirror.sh                    # Script principal (modulaire)
 ├── README.md                        # Documentation principale
@@ -51,6 +51,7 @@ git-mirror/
 ## 🧹 Nettoyage Effectué
 
 ### ❌ Fichiers Supprimés (Obsolètes)
+
 - `test_architecture.sh` - Script de test temporaire
 - `tests/unit/test_modules_simple.sh` - Tests unitaires en doublon
 - `tests/integration/` - Répertoire vide
@@ -63,6 +64,7 @@ git-mirror/
 - `lib/validator.sh` - Ancien module validator
 
 ### 📁 Fichiers Déplacés (Réorganisés)
+
 - `PHASE_2_1_SUMMARY.md` → `docs/phases/`
 - `ARCHITECTURE.md` → `docs/`
 - `git-mirror-legacy.sh` → `archive/`
@@ -70,6 +72,7 @@ git-mirror/
 ## 🎯 Structure Finale - Propre et Cohérente
 
 ### ✅ Avantages de cette Organisation
+
 1. **Clarté** - Chaque fichier a sa place logique
 2. **Maintenabilité** - Structure facile à comprendre
 3. **Évolutivité** - Facile d'ajouter de nouveaux modules
@@ -78,6 +81,7 @@ git-mirror/
 6. **Archivage** - Anciens fichiers préservés mais séparés
 
 ### 📊 Métriques Finales
+
 - **Scripts principaux** : 1 (git-mirror.sh)
 - **Modules fonctionnels** : 6 (lib/)
 - **Tests** : 2 suites

@@ -2,7 +2,7 @@
 
 ## 📁 Structure du Projet
 
-```
+```text
 git-mirror/
 ├── git-mirror.sh              # Script principal (modulaire)
 ├── archive/
@@ -34,12 +34,14 @@ git-mirror/
 ## 🔄 Évolution du Script
 
 ### Phase 1 : Script Monolithique
+
 - **Fichier** : `archive/git-mirror-legacy.sh` (1801 lignes)
 - **Caractéristiques** : Tout dans un seul fichier
 - **Avantages** : Simple à distribuer
 - **Inconvénients** : Difficile à maintenir, tester et étendre
 
 ### Phase 2.1 : Architecture Modulaire ✅
+
 - **Fichier principal** : `git-mirror.sh` (536 lignes)
 - **Modules** : 7 modules spécialisés dans `lib/`
 - **Configuration** : Centralisée dans `config/`
@@ -49,6 +51,7 @@ git-mirror/
 ## 🎯 Pourquoi Cette Architecture ?
 
 ### ✅ Avantages de l'Architecture Modulaire
+
 1. **Séparation des responsabilités** - Chaque module a une fonction spécifique
 2. **Réutilisabilité** - Les modules peuvent être utilisés indépendamment
 3. **Maintenabilité** - Code organisé et facile à maintenir
@@ -57,6 +60,7 @@ git-mirror/
 6. **Design Patterns** - Architecture basée sur les patterns éprouvés
 
 ### 🏗️ Design Patterns Utilisés
+
 - **Facade** : Interface simplifiée pour les modules complexes
 - **Strategy** : Algorithmes interchangeables (auth, validation)
 - **Observer** : Notifications et événements
