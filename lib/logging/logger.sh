@@ -62,6 +62,27 @@ init_logger() {
     local dry_run_mode="${3:-false}"
     local timestamp="${4:-true}"
     
+    # Validation paramètres
+    if ! [[ "$verbose_level" =~ ^[0-9]+$ ]]; then
+        echo "init_logger: verbose_level doit être un nombre (reçu: '$verbose_level')" >&2
+        return 1
+    fi
+    
+    if ! [[ "$quiet_mode" =~ ^(true|false)$ ]]; then
+        echo "init_logger: quiet_mode doit être 'true' ou 'false' (reçu: '$quiet_mode')" >&2
+        return 1
+    fi
+    
+    if ! [[ "$dry_run_mode" =~ ^(true|false)$ ]]; then
+        echo "init_logger: dry_run_mode doit être 'true' ou 'false' (reçu: '$dry_run_mode')" >&2
+        return 1
+    fi
+    
+    if ! [[ "$timestamp" =~ ^(true|false)$ ]]; then
+        echo "init_logger: timestamp doit être 'true' ou 'false' (reçu: '$timestamp')" >&2
+        return 1
+    fi
+    
     VERBOSE_LEVEL="$verbose_level"
     QUIET_MODE="$quiet_mode"
     DRY_RUN_MODE="$dry_run_mode"
@@ -147,6 +168,7 @@ logger_status() {
 }
 
 # Fonctions de log spéciales pour stderr (pour les fonctions qui retournent des valeurs)
+# Wrappers optimisés : délégation directe vers _log_message avec output_fd=2
 log_error_stderr() {
     if [ "$QUIET_MODE" = false ]; then
         _log_message "ERROR" "$RED" "$*" 2
