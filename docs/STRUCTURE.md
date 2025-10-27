@@ -18,7 +18,7 @@ git-mirror/
 │       ├── Variables d'environnement
 │       └── Paramètres globaux
 │
-├── lib/                            # Modules fonctionnels (12 modules)
+├── lib/                            # Modules fonctionnels (13 modules)
 │   ├── logging/
 │   │   └── logger.sh              # Système de logging avec couleurs
 │   │
@@ -75,8 +75,11 @@ git-mirror/
 │   │   └── incremental.sh        # Mode incrémental
 │   │       └── Based on pushed_at
 │   │
-│   └── profiling/
-│       └── profiling.sh           # Profiling
+│   ├── profiling/
+│   │   └── profiling.sh           # Profiling
+│   │
+│   └── utils/
+│       └── utils.sh               # Utilitaires partagés
 │
 ├── tests/                          # Tests
 │   └── unit/

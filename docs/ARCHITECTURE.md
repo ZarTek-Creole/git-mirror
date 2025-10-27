@@ -68,7 +68,7 @@ git-mirror/
 
 ### Phase 2 : Architecture Modulaire ✅
 - **Fichier principal** : `git-mirror.sh` (915 lignes, facade pattern)
-- **Modules** : 12 modules spécialisés dans `lib/`
+- **Modules** : 13 modules spécialisés dans `lib/`
 - **Configuration** : Centralisée dans `config/`
 - **Tests** : Suite de tests Bats
 - **Avantages** : Maintenable, testable, extensible
@@ -154,6 +154,11 @@ Le script principal `git-mirror.sh` agit comme une facade, orchestrant les appel
 - Mesure de performance
 - Détails par fonction
 - Export des stats
+
+#### 13. Utils (`lib/utils/utils.sh`)
+- Utilitaires partagés
+- Fonctions communes
+- Helpers transversaux
 
 ## 🔧 Options Principales
 
