@@ -46,6 +46,8 @@ INCREMENTAL=false
 CACHE_DIR=".git-mirror-cache"
 CACHE_TTL="$CONFIG_CACHE_TTL"
 STATE_FILE=".git-mirror-state.json"
+export REPO_TYPE="all"
+export EXCLUDE_FORKS=false
 
 # Variables d'authentification
 AUTH_METHOD="auto"

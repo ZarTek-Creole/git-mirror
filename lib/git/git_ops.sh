@@ -52,9 +52,56 @@ clone_repository() {
     
     local repo_name
     repo_name=$(basename "$repo_url" .git)
-    local full_dest_path="$dest_dir/$repo_name"
+    
+    # Normaliser le chemin de destination en chemin absolu
+    # Ceci évite les problèmes de changement de répertoire courant en mode parallèle
+    local absolute_dest_dir
+    if [[ "$dest_dir" = /* ]]; then
+        # Chemin déjà absolu (mode parallel)
+        absolute_dest_dir="$dest_dir"
+    elif [ -d "$dest_dir" ]; then
+        # Si le répertoire existe, obtenir le chemin absolu
+        absolute_dest_dir=$(cd "$dest_dir" && pwd)
+    else
+        # Chemin relatif, le rendre absolu
+        absolute_dest_dir="$(pwd)/$dest_dir"
+    fi
+    
+    local full_dest_path="$absolute_dest_dir/$repo_name"
     
     log_info "Clonage du dépôt: $repo_name dans $full_dest_path"
+    
+    # CRITIQUE: Créer le répertoire parent AVANT le clonage pour éviter race conditions en parallèle
+    # Univocité avec retry pour gérer les créations concurrentes
+    local retries=0
+    while [ $retries -lt 5 ] && [ ! -d "$absolute_dest_dir" ]; do
+        mkdir -p "$absolute_dest_dir" 2>/dev/null || true
+        retries=$((retries + 1))
+        sleep 0.1
+    done
+    
+    # NETTOYER le répertoire de destination s'il existe et est corrompu (clone partiel en parallèle)
+    if [ -d "$full_dest_path" ]; then
+        # Si le répertoire existe mais n'est pas un dépôt Git valide, le nettoyer
+        if [ ! -d "$full_dest_path/.git" ]; then
+            log_warning "Répertoire $repo_name existe mais n'est pas un dépôt Git valide, nettoyage..."
+            rm -rf "$full_dest_path"
+        # Si c'est un dépôt Git mais incomplet (erreur précédente), le considérer comme existant
+        elif [ -d "$full_dest_path/.git" ] && [ ! -f "$full_dest_path/.git/HEAD" ]; then
+            log_warning "Dépôt $repo_name semble incomplet, nettoyage..."
+            rm -rf "$full_dest_path"
+        else
+            # C'est un vrai dépôt Git, retourner succès
+            log_debug "Dépôt $repo_name existe déjà"
+            return 0
+        fi
+    fi
+    
+    # Vérifier que le répertoire parent existe maintenant
+    if [ ! -d "$absolute_dest_dir" ]; then
+        log_error "Impossible de créer le répertoire de destination: $absolute_dest_dir"
+        return 1
+    fi
     
     # Construire les options Git
     local git_opts=""
@@ -82,8 +129,17 @@ clone_repository() {
         git_opts="$git_opts --no-checkout"
     fi
     
-    # Submodules
-    git_opts="$git_opts --recurse-submodules"
+    # Submodules - désactivés par défaut en mode depth=1 pour éviter les problèmes
+    # Note: Les submodules corrompus font échouer tout le clone
+    # On peut les ajouter après si nécessaire
+    if [ "${NO_SUBMODULES:-false}" != "true" ] && [ "$depth" -eq 1 ]; then
+        # En shallow clone, les submodules peuvent causer des problèmes
+        # Pour l'instant on les désactive en mode depth=1
+        # git_opts="$git_opts --recurse-submodules"
+        log_debug "Submodules désactivés en mode shallow clone (depth=$depth)"
+    elif [ "${NO_SUBMODULES:-false}" != "true" ]; then
+        git_opts="$git_opts --recurse-submodules"
+    fi
     
     # Mode verbeux
     if [ "${VERBOSE_LEVEL:-0}" -eq 0 ] && [ "${QUIET_MODE:-false}" = false ]; then
@@ -106,8 +162,20 @@ clone_repository() {
         
         return 0
     else
+        # En cas d'échec, essayer de nettoyer et recommencer une dernière fois
+        log_warning "Premier clonage échoué pour $repo_name, nettoyage et nouvelle tentative..."
+        rm -rf "$full_dest_path" 2>/dev/null || true
+        
+        # Retenter une seule fois
+        if _execute_git_command "$git_cmd" "clone"; then
+            GIT_SUCCESS_COUNT=$((GIT_SUCCESS_COUNT + 1))
+            log_success "Dépôt cloné avec succès au second essai: $repo_name"
+            _configure_safe_directory "$full_dest_path"
+            return 0
+        fi
+        
         GIT_FAILURE_COUNT=$((GIT_FAILURE_COUNT + 1))
-        log_error "Échec du clonage: $repo_name"
+        log_error "Échec du clonage après 2 tentatives: $repo_name"
         return 1
     fi
 }
@@ -196,10 +264,19 @@ _update_submodules() {
 _configure_safe_directory() {
     local repo_path="$1"
     
-    # Vérifier si le dépôt est déjà configuré comme safe
-    if ! git config --global --get-all safe.directory | grep -Fxq "$repo_path"; then
+    # Variable statique pour éviter multiples vérifications
+    if [ "${_GIT_SAFE_DIRS_CHECKED:-false}" != "true" ]; then
+        # Vérifier ONCE si le dépôt est déjà configuré comme safe
+        if git config --global --get-all safe.directory | grep -Fxq "$repo_path"; then
+            _GIT_SAFE_DIRS_CHECKED="true"
+            return 0
+        fi
+        
+        # Ajouter SEULEMENT SI nécessaire (éviter pollution config)
         log_debug "Configuration de safe.directory pour: $repo_path"
         git config --global --add safe.directory "$repo_path" || true
+        
+        _GIT_SAFE_DIRS_CHECKED="true"
     fi
 }
 
@@ -335,13 +412,21 @@ _reset_git_stats() {
 # Obtenir les statistiques du module Git
 get_git_stats() {
     echo "Git Operations Statistics:"
-    echo "  Total operations: $GIT_OPERATIONS_COUNT"
-    echo "  Successful: $GIT_SUCCESS_COUNT"
-    echo "  Failed: $GIT_FAILURE_COUNT"
-    if [ "$GIT_OPERATIONS_COUNT" -gt 0 ]; then
-        local success_rate
-        success_rate=$((GIT_SUCCESS_COUNT * 100 / GIT_OPERATIONS_COUNT))
-        echo "  Success rate: ${success_rate}%"
+    
+    # En mode parallel, les statistiques ne sont pas synchronisées entre processus
+    # Afficher un message approprié
+    if [ "${PARALLEL_ENABLED:-false}" = "true" ]; then
+        echo "  Mode: Parallel execution (statistics aggregated by main process)"
+        echo "  Note: Individual operation stats not available in parallel mode"
+    else
+        echo "  Total operations: $GIT_OPERATIONS_COUNT"
+        echo "  Successful: $GIT_SUCCESS_COUNT"
+        echo "  Failed: $GIT_FAILURE_COUNT"
+        if [ "$GIT_OPERATIONS_COUNT" -gt 0 ]; then
+            local success_rate
+            success_rate=$((GIT_SUCCESS_COUNT * 100 / GIT_OPERATIONS_COUNT))
+            echo "  Success rate: ${success_rate}%"
+        fi
     fi
 }
 

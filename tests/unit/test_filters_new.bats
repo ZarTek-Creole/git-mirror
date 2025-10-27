@@ -90,13 +90,20 @@ load 'test_helper.bash'
     
     local repos_json='[{"name": "test-repo", "full_name": "user/test-repo"}, {"name": "real-repo", "full_name": "user/real-repo"}]'
     
-    run filters_filter_repos "$repos_json"
+    # Capturer stdout uniquement (ignorer stderr avec les logs)
+    local result
+    result=$(filters_filter_repos "$repos_json" 2>/dev/null)
     
-    [ "$status" -eq 0 ]
+    [ "$?" -eq 0 ]
     
-    # Should only contain real-repo
-    run echo "$output" | jq -r '.[0].name'
-    [ "$output" = "real-repo" ]
+    # Vérifier que seulement real-repo est présent
+    local repo_count
+    repo_count=$(echo "$result" | jq '. | length')
+    [ "$repo_count" -eq 1 ]
+    
+    local repo_name
+    repo_name=$(echo "$result" | jq -r '.[0].name')
+    [ "$repo_name" = "real-repo" ]
 }
 
 @test "filters_show_summary displays filter configuration" {

@@ -5,17 +5,131 @@ set -euo pipefail
 
 # lib/auth/auth.sh - Module d'authentification GitHub
 # Gère l'authentification via Token GitHub, SSH ou mode public
+# Pattern: Chain of Responsibility
 
 # Variables d'environnement supportées
 # GITHUB_TOKEN : token d'accès personnel GitHub
 # GITHUB_SSH_KEY : chemin vers clé SSH (optionnel)
 # GITHUB_AUTH_METHOD : force méthode (token/ssh/public)
 
-# Détecte la méthode d'authentification disponible
+# Menu interactif pour choisir l'authentification
+auth_interactive_menu() {
+    echo ""
+    echo "=== Configuration de l'authentification GitHub ==="
+    echo ""
+    echo "Choisissez votre méthode d'authentification :"
+    echo ""
+    echo "1) GitHub CLI (gh) - Recommandé"
+    echo "2) Token personnel GitHub"
+    echo "3) Clé SSH"
+    echo "4) Mode public (sans authentification)"
+    echo "5) Annuler"
+    echo ""
+    
+    read -p "Votre choix [1-5] : " choice
+    
+    case $choice in
+        1)
+            if command -v gh >/dev/null 2>&1; then
+                if gh auth status &>/dev/null; then
+                    local gh_token
+                    gh_token=$(gh auth token 2>/dev/null)
+                    if [ -n "$gh_token" ]; then
+                        export GITHUB_TOKEN=$(echo "$gh_token" | tr -d '[:space:]')
+                        export GITHUB_AUTH_METHOD="token"
+                        echo "✅ GitHub CLI configuré avec succès"
+                        return 0
+                    fi
+                else
+                    echo "⚠️  GitHub CLI installé mais non authentifié"
+                    echo "   Exécutez: gh auth login"
+                    return 1
+                fi
+            else
+                echo "❌ GitHub CLI (gh) non installé"
+                echo "   Installation: https://cli.github.com/"
+                return 1
+            fi
+            ;;
+        2)
+            echo ""
+            echo "Créez un token sur: https://github.com/settings/tokens"
+            echo "Permissions requises: repo (pour dépôts privés)"
+            echo ""
+            read -p "Entrez votre token GitHub : " -s token_input
+            echo ""
+            
+            if [ -n "$token_input" ]; then
+                export GITHUB_TOKEN=$(echo "$token_input" | tr -d '[:space:]')
+                export GITHUB_AUTH_METHOD="token"
+                
+                # Valider le token
+                if auth_validate_token "$GITHUB_TOKEN" >/dev/null 2>&1; then
+                    echo "✅ Token validé avec succès"
+                    return 0
+                else
+                    echo "❌ Token invalide"
+                    unset GITHUB_TOKEN
+                    return 1
+                fi
+            else
+                echo "❌ Token vide"
+                return 1
+            fi
+            ;;
+        3)
+            if ssh -T git@github.com 2>&1 | grep -q "successfully authenticated"; then
+                export GITHUB_AUTH_METHOD="ssh"
+                echo "✅ Clé SSH GitHub détectée"
+                return 0
+            else
+                echo "❌ Aucune clé SSH GitHub configurée"
+                echo "   Guide: https://docs.github.com/en/authentication/connecting-to-github-with-ssh"
+                return 1
+            fi
+            ;;
+        4)
+            export GITHUB_AUTH_METHOD="public"
+            echo "⚠️  Mode public activé (rate limit: 60 req/h)"
+            echo "   Certaines fonctionnalités seront limitées"
+            return 0
+            ;;
+        5)
+            echo "❌ Configuration annulée"
+            return 1
+            ;;
+        *)
+            echo "❌ Choix invalide"
+            return 1
+            ;;
+    esac
+}
+
+# Chaîne de responsabilité pour détecter l'authentification (Pattern Chain of Responsibility)
 auth_detect_method() {
     local method=""
     
-    # Vérifier si un token GitHub est disponible et valide
+    # PRIORITÉ 1: GitHub CLI (gh) - Méthode recommandée
+    if command -v gh >/dev/null 2>&1; then
+        local gh_token
+        if gh_token=$(gh auth token 2>/dev/null) && [ -n "$gh_token" ]; then
+            # Token gh trouvé, le nettoyer et l'utiliser
+            export GITHUB_TOKEN=$(echo "$gh_token" | tr -d '[:space:]')
+            log_debug_stderr "Token GitHub détecté via GitHub CLI (gh)"
+            
+            # Valider le token
+            if auth_validate_token "$GITHUB_TOKEN" >/dev/null 2>&1; then
+                method="token"
+                log_debug_stderr "Token GitHub CLI validé avec succès"
+                echo "$method"
+                return 0
+            else
+                log_debug_stderr "Token GitHub CLI invalide, essai autres méthodes"
+            fi
+        fi
+    fi
+    
+    # PRIORITÉ 2: Token GitHub dans variable d'environnement
     if [ -n "${GITHUB_TOKEN:-}" ]; then
         # Nettoyer le token (supprimer les espaces et les nouvelles lignes)
         local clean_token
@@ -27,45 +141,29 @@ auth_detect_method() {
             if auth_validate_token "$clean_token" >/dev/null 2>&1; then
                 method="token"
                 log_debug_stderr "Token GitHub détecté et validé"
+                echo "$method"
+                return 0
             else
                 log_debug_stderr "Token GitHub présent (format valide) mais validation API échouée, essai mode public"
-                method="public"
             fi
         else
-            log_debug_stderr "Token GitHub présent mais format invalide, utilisation du mode public"
-            method="public"
+            log_debug_stderr "Token GitHub présent mais format invalide, essai mode public"
         fi
-    # Vérifier si une clé SSH est configurée
-    elif ssh -T git@github.com 2>&1 | grep -q "successfully authenticated"; then
+    fi
+    
+    # PRIORITÉ 3: Clé SSH GitHub configurée
+    if ssh -T git@github.com 2>&1 | grep -q "successfully authenticated"; then
         method="ssh"
         log_debug_stderr "Clé SSH GitHub détectée"
-    else
-        method="public"
-        log_debug_stderr "Aucune authentification détectée, utilisation du mode public"
+        echo "$method"
+        return 0
     fi
     
-    # Forcer une méthode si spécifiée
-    if [ -n "${GITHUB_AUTH_METHOD:-}" ]; then
-        case "$GITHUB_AUTH_METHOD" in
-            token)
-                if [ -n "${GITHUB_TOKEN:-}" ]; then
-                    method="token"
-                else
-                    log_error_stderr "Token GitHub requis mais non fourni"
-                    return 1
-                fi
-                ;;
-            ssh|public)
-                method="$GITHUB_AUTH_METHOD"
-                ;;
-            *)
-                log_error_stderr "Méthode d'authentification invalide: $GITHUB_AUTH_METHOD"
-                return 1
-                ;;
-        esac
-    fi
-    
+    # PRIORITÉ 4: Mode public (fallback)
+    method="public"
+    log_debug_stderr "Aucune authentification détectée, utilisation du mode public"
     echo "$method"
+    return 0
 }
 
 # Valide le format et les permissions d'un token GitHub
@@ -129,6 +227,7 @@ auth_get_headers() {
     case "$method" in
         token)
             if [ -n "${GITHUB_TOKEN:-}" ]; then
+                # IMPORTANT: Les quotes sont nécessaires pour que curl traite correctement la valeur du header
                 headers="-H \"Authorization: token $GITHUB_TOKEN\""
             fi
             ;;
@@ -171,7 +270,37 @@ auth_transform_url() {
 
 # Initialise l'authentification et retourne la méthode utilisée
 auth_init() {
-    local method
+    local method=""
+    
+    # Si méthode forcée, l'utiliser directement
+    if [ -n "${GITHUB_AUTH_METHOD:-}" ]; then
+        case "$GITHUB_AUTH_METHOD" in
+            token)
+                if [ -n "${GITHUB_TOKEN:-}" ]; then
+                    if auth_validate_token "$GITHUB_TOKEN" >/dev/null 2>&1; then
+                        export GITHUB_AUTH_METHOD="token"
+                        return 0
+                    else
+                        log_error_stderr "Token GitHub invalide"
+                        return 1
+                    fi
+                else
+                    log_error_stderr "Token GitHub requis mais non fourni"
+                    return 1
+                fi
+                ;;
+            ssh|public)
+                export GITHUB_AUTH_METHOD="$GITHUB_AUTH_METHOD"
+                return 0
+                ;;
+            *)
+                log_error_stderr "Méthode d'authentification invalide: $GITHUB_AUTH_METHOD"
+                return 1
+                ;;
+        esac
+    fi
+    
+    # Détection automatique
     if ! method=$(auth_detect_method 2>/dev/null) || [ -z "$method" ]; then
         return 1
     fi
@@ -202,8 +331,26 @@ auth_init() {
     return 0
 }
 
-# Fonction principale d'authentification
+# Fonction principale d'authentification avec menu interactif
 auth_setup() {
+    local method=""
+    
+    # Si aucune méthode n'a été détectée automatiquement, proposer le menu
+    if ! method=$(auth_detect_method 2>/dev/null) || [ -z "$method" ] || [ "$method" = "public" ]; then
+        # Mode interactif uniquement si terminal et pas de --yes
+        if [ -t 0 ] && [ "${YES:-false}" != "true" ] && [ -z "${GITHUB_AUTH_METHOD:-}" ]; then
+            echo ""
+            log_warning_stderr "Aucune authentification GitHub détectée"
+            read -p "Voulez-vous configurer l'authentification maintenant ? (O/n) " -r
+            if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+                if ! auth_interactive_menu; then
+                    log_error_stderr "Configuration d'authentification annulée ou échouée"
+                    export GITHUB_AUTH_METHOD="public"
+                fi
+            fi
+        fi
+    fi
+    
     # Détecter et initialiser la méthode d'authentification
     if ! auth_init; then
         log_error_stderr "Impossible d'initialiser l'authentification"
@@ -211,9 +358,9 @@ auth_setup() {
     fi
     
     # La méthode est déjà exportée dans auth_init
-    local method="${GITHUB_AUTH_METHOD:-public}"
+    local final_method="${GITHUB_AUTH_METHOD:-public}"
     
-    log_success_stderr "Authentification configurée: $method"
+    log_success_stderr "Authentification configurée: $final_method"
     # Ne pas retourner la méthode via stdout (pour éviter la pollution des logs)
     return 0
 }

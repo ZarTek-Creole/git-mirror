@@ -19,6 +19,14 @@ interactive_init() {
     log_debug "Mode automatique: $AUTO_YES"
 }
 
+# Statistiques interactives
+get_interactive_stats() {
+    echo "Interactive Statistics:"
+    echo "  Interactive mode: ${INTERACTIVE_MODE:-false}"
+    echo "  Confirm mode: ${CONFIRM_MODE:-false}"
+    echo "  Auto yes: ${AUTO_YES:-false}"
+}
+
 # Vérifie si le terminal est interactif
 interactive_is_terminal() {
     if [ -t 0 ] && [ -t 1 ]; then

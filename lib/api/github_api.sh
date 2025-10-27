@@ -10,6 +10,8 @@ set -euo pipefail
 API_BASE_URL="https://api.github.com"
 API_CACHE_DIR="${CACHE_DIR:-.git-mirror-cache}/api"
 API_CACHE_TTL="${API_CACHE_TTL:-3600}"  # 1 heure par défaut
+API_MAX_RETRIES="${API_MAX_RETRIES:-3}"  # Nombre max de tentatives pour retry
+API_RETRY_DELAY="${API_RETRY_DELAY:-5}"  # Délai de base pour retry (secondes)
 
 # Initialise le module API
 api_init() {
@@ -18,17 +20,19 @@ api_init() {
     
     log_debug "Module API GitHub initialisé"
     log_debug "Cache API: $API_CACHE_DIR (TTL: ${API_CACHE_TTL}s)"
+    log_debug "Retry: max=${API_MAX_RETRIES}, delay=${API_RETRY_DELAY}s"
 }
 
 # Vérifie les limites de taux API restantes
 api_check_rate_limit() {
     local headers
-    headers=$(auth_get_headers "$GITHUB_AUTH_METHOD")
+    headers=$(auth_get_headers "${GITHUB_AUTH_METHOD:-public}")
     
     local response
-    # SÉCURITÉ : Utilisation directe de curl SANS eval
+    # Utilisation de eval pour permettre l'expansion correcte des quotes dans headers
+    # SÉCURITÉ: headers ne peut contenir que des valeurs contrôlées (pas d'input utilisateur)
     if [ -n "$headers" ]; then
-        if ! response=$(curl -s "$headers" -H "Accept: application/vnd.github.v3+json" "$API_BASE_URL/rate_limit" 2>/dev/null); then
+        if ! response=$(eval "curl -s $headers -H 'Accept: application/vnd.github.v3+json' '$API_BASE_URL/rate_limit'" 2>/dev/null); then
             log_warning "Impossible de vérifier les limites de taux API"
             return 1
         fi
@@ -69,7 +73,7 @@ api_check_rate_limit() {
 # Attend si la limite de taux est atteinte
 api_wait_rate_limit() {
     local headers
-    headers=$(auth_get_headers "$GITHUB_AUTH_METHOD")
+    headers=$(auth_get_headers "${GITHUB_AUTH_METHOD:-public}")
     
     local response
     # SÉCURITÉ : Utilisation directe de curl SANS eval
@@ -134,8 +138,8 @@ api_fetch_with_cache() {
     cache_key=$(api_cache_key "$url")
     local cache_file="$API_CACHE_DIR/$cache_key.json"
     
-    # Vérifier le cache
-    if api_cache_valid "$cache_file" "$API_CACHE_TTL"; then
+    # Vérifier le cache (sauf si désactivé via --no-cache)
+    if [ "${API_CACHE_DISABLED:-false}" != "true" ] && api_cache_valid "$cache_file" "$API_CACHE_TTL"; then
         log_debug "Utilisation du cache pour: $url"
         cat "$cache_file"
         return 0
@@ -156,18 +160,29 @@ api_fetch_with_cache() {
     
     # Faire l'appel API avec gestion des erreurs améliorée
     local headers
-    headers=$(auth_get_headers "$GITHUB_AUTH_METHOD")
+    headers=$(auth_get_headers "${GITHUB_AUTH_METHOD:-public}")
     
     local response
     local http_code
-    # SÉCURITÉ : Utilisation directe de curl SANS eval
+    
+    # Utilisation de eval pour permettre l'expansion correcte des quotes dans headers
+    # SÉCURITÉ: headers ne peut contenir que des valeurs contrôlées (pas d'input utilisateur)
+    local temp_file
+    temp_file=$(mktemp)
+    
     if [ -n "$headers" ]; then
-        response=$(curl -s -w "%{http_code}" "$headers" -H "Accept: application/vnd.github.v3+json" "$url" 2>&1)
+        eval "curl -s -w '\nHTTP_CODE:%{http_code}\n' $headers -H 'Accept: application/vnd.github.v3+json' '$url' > $temp_file" 2>/dev/null
     else
-        response=$(curl -s -w "%{http_code}" -H "Accept: application/vnd.github.v3+json" "$url" 2>&1)
+        curl -s -w "\nHTTP_CODE:%{http_code}\n" -H "Accept: application/vnd.github.v3+json" "$url" > "$temp_file" 2>/dev/null
     fi
-    http_code="${response: -3}"
-    response="${response%???}"
+    
+    # Extraire le code HTTP (dernière ligne)
+    http_code=$(tail -n1 "$temp_file" | grep "^HTTP_CODE:" | cut -d: -f2 | tr -d '\n\r ')
+    
+    # Extraire la réponse sans le code HTTP
+    response=$(head -n -1 "$temp_file")
+    
+    rm -f "$temp_file"
     
     log_debug "Réponse HTTP: $http_code pour $url"
     log_debug "Headers utilisés: $headers"
@@ -245,39 +260,58 @@ api_fetch_all_repos() {
     
     log_info "Récupération des dépôts avec pagination automatique..." >&2
     
-    # Vérifier d'abord si nous avons un cache complet
+    # Vérifier d'abord si nous avons un cache complet (sauf si désactivé via --no-cache)
+    # Inclure l'état d'authentification et le type de dépôt dans la clé de cache
+    local auth_state="public"
+    if [ "$context" = "users" ] && [ -n "${GITHUB_AUTH_METHOD:-}" ]; then
+        if [ "$GITHUB_AUTH_METHOD" != "public" ]; then
+            auth_state="authenticated"
+        fi
+    fi
+    local repo_type_state="${REPO_TYPE:-all}"
     local cache_key
-    cache_key=$(api_cache_key "all_repos_${context}_${username}")
+    cache_key=$(api_cache_key "all_repos_${context}_${username}_${auth_state}_${repo_type_state}")
     local cache_file="$API_CACHE_DIR/${cache_key}.json"
     
-    if api_cache_valid "$cache_file" "$API_CACHE_TTL"; then
+    if [ "${API_CACHE_DISABLED:-false}" != "true" ] && api_cache_valid "$cache_file" "$API_CACHE_TTL"; then
         log_debug "Utilisation du cache complet pour tous les dépôts" >&2
         cat "$cache_file"
         return 0
     fi
     
-    # Utiliser /user/repos pour l'utilisateur authentifié (dépôts publics + privés)
-    # ou /users/:username/repos pour les autres utilisateurs (dépôts publics uniquement)
+    # Déterminer l'URL API et le type selon REPO_TYPE
     local api_url
+    local actual_repo_type
+    local repo_type_param
+    actual_repo_type="${REPO_TYPE:-all}"
+    
+    # Décider quelle URL utiliser et quel paramètre type passer
     if [ "$context" = "users" ] && [ -n "${GITHUB_AUTH_METHOD:-}" ] && [ "$GITHUB_AUTH_METHOD" != "public" ]; then
-        # Authentifié et c'est notre propre compte : utiliser /user/repos pour avoir publics + privés
-        api_url="https://api.github.com/user/repos"
+        # Mode authentifié : utiliser /user/repos avec le paramètre type
+        api_url="$API_BASE_URL/user/repos"
+        repo_type_param="$actual_repo_type"
+        log_debug "Mode authentifié : récupération des dépôts de type '$actual_repo_type'" >&2
     else
-        # Compte public ou autre utilisateur : utiliser l'endpoint classique
+        # Mode public : utiliser /users/:username/repos (seulement publics disponibles)
+        if [ "$actual_repo_type" != "public" ] && [ "$actual_repo_type" != "all" ]; then
+            log_warning "Les dépôts privés ne sont disponibles qu'en mode authentifié. Utilisation des dépôts publics seulement." >&2
+        fi
         api_url="$API_BASE_URL/$context/$username/repos"
+        repo_type_param="all"  # Pour compatibilité
+        log_debug "Mode public : récupération des dépôts publics seulement" >&2
     fi
     
     while true; do
-        local url="$api_url?page=$page&per_page=$per_page&sort=updated&direction=desc&type=all"
+        local url="$api_url?page=$page&per_page=$per_page&sort=updated&direction=desc&type=$repo_type_param"
         
-        log_debug "Récupération page $page..."
+        log_debug "Récupération page $page..." >&2
         
         local response
         if ! response=$(api_fetch_with_cache "$url"); then
-            log_error "Échec de la récupération de la page $page"
+            log_error "Échec de la récupération de la page $page" >&2
             # Si nous avons des dépôts partiels, les retourner
             if [ "$all_repos" != "[]" ]; then
-                log_warning "Retour des dépôts partiellement récupérés"
+                log_warning "Retour des dépôts partiellement récupérés" >&2
                 echo "$all_repos"
                 return 0
             fi
@@ -285,17 +319,17 @@ api_fetch_all_repos() {
         fi
         
         # Debug: afficher la réponse pour diagnostiquer
-        log_debug "Réponse API page $page reçue (longueur: ${#response})"
+        log_debug "Réponse API page $page reçue (longueur: ${#response})" >&2
         
         # Vérifier si la réponse est vide ou invalide
         if [ -z "$response" ] || [ "$response" = "null" ] || [ "$response" = "[]" ]; then
-            log_debug "Page $page vide ou invalide (réponse: $response), fin de la pagination"
+            log_debug "Page $page vide ou invalide (réponse: $response), fin de la pagination" >&2
             break
         fi
         
         # Vérifier si c'est un tableau JSON valide
         if ! echo "$response" | jq -e 'type == "array"' >/dev/null 2>&1; then
-            log_error "Réponse API invalide pour la page $page (pas un tableau JSON)"
+            log_error "Réponse API invalide pour la page $page (pas un tableau JSON)" >&2
             break
         fi
         
@@ -304,11 +338,11 @@ api_fetch_all_repos() {
         page_count=$(echo "$response" | jq 'length')
         
         if [ "$page_count" -eq 0 ]; then
-            log_debug "Page $page contient 0 dépôts, fin de la pagination"
+            log_debug "Page $page contient 0 dépôts, fin de la pagination" >&2
             break
         fi
         
-        log_debug "Page $page contient $page_count dépôts"
+        log_debug "Page $page contient $page_count dépôts" >&2
         
         # Fusionner avec les dépôts existants (seulement si la page n'est pas vide)
         if [ "$page_count" -gt 0 ]; then
@@ -318,11 +352,11 @@ api_fetch_all_repos() {
             temp_result=$(mktemp)
             echo "$all_repos" > "$temp_file1"
             echo "$response" > "$temp_file2"
-            log_debug "Avant fusion - all_repos: $(jq 'length' "$temp_file1"), response: $(jq 'length' "$temp_file2")"
+            log_debug "Avant fusion - all_repos: $(jq 'length' "$temp_file1"), response: $(jq 'length' "$temp_file2")" >&2
             jq -s '.[0] + .[1]' "$temp_file1" "$temp_file2" > "$temp_result"
             all_repos=$(cat "$temp_result")
             rm -f "$temp_file1" "$temp_file2" "$temp_result"
-            log_debug "Après fusion - Total: $(echo "$all_repos" | jq 'length')"
+            log_debug "Après fusion - Total: $(echo "$all_repos" | jq 'length')" >&2
         fi
         
         # Passer à la page suivante
@@ -350,12 +384,13 @@ api_get_total_repos() {
     local context="$1"
     local username="$2"
     
-    # Essayer d'abord avec le cache
+    # Essayer d'abord avec le cache (inclure REPO_TYPE dans la clé)
+    local repo_type_state="${REPO_TYPE:-all}"
     local cache_key
-    cache_key=$(api_cache_key "total_${context}_${username}")
+    cache_key=$(api_cache_key "total_${context}_${username}_${repo_type_state}")
     local cache_file="$API_CACHE_DIR/${cache_key}.json"
     
-    if api_cache_valid "$cache_file" "$API_CACHE_TTL"; then
+    if [ "${API_CACHE_DISABLED:-false}" != "true" ] && api_cache_valid "$cache_file" "$API_CACHE_TTL"; then
         local cached_total
         cached_total=$(cat "$cache_file")
         log_debug "Utilisation du cache pour le nombre total de dépôts: $cached_total"
@@ -371,18 +406,20 @@ api_get_total_repos() {
     else
         api_url="$API_BASE_URL/$context/$username/repos"
     fi
-    local url="$api_url?per_page=1&type=all"
+    # Utiliser le même type que REPO_TYPE
+    local repo_type_param="${REPO_TYPE:-all}"
+    local url="$api_url?per_page=1&type=$repo_type_param"
     
     local response
-    if ! response=$(api_fetch_with_cache "$url"); then
-        log_warning "Impossible de récupérer le nombre total de dépôts, utilisation de l'estimation par défaut"
+    if ! response=$(api_fetch_with_cache "$url" 2>/dev/null); then
+        log_warning "Impossible de récupérer le nombre total de dépôts, utilisation de l'estimation par défaut" >&2
         echo "100"
         return 0
     fi
     
     # Extraire le nombre total depuis les headers de pagination
     local headers
-    headers=$(auth_get_headers "$GITHUB_AUTH_METHOD")
+    headers=$(auth_get_headers "${GITHUB_AUTH_METHOD:-public}")
     
     local link_header
     # SÉCURITÉ : Utilisation directe de curl SANS eval

@@ -6,19 +6,47 @@ set -euo pipefail
 # lib/filters/filters.sh - Module de filtrage des dépôts
 # Gère l'exclusion et l'inclusion de dépôts par patterns
 
-# Variables de configuration
+# Protection contre double-load du module
+if [ "${FILTERS_MODULE_LOADED:-false}" = "true" ]; then
+    return 0
+fi
+
+# Variables readonly pour la sécurité
+readonly FILTERS_VERSION="1.0.0"
+readonly FILTERS_MODULE_NAME="filters"
+readonly FILTERS_MODULE_LOADED="true"
+
+# Variables de configuration (mutables pour permettre configuration dynamique)
 FILTER_ENABLED="${FILTER_ENABLED:-false}"
 EXCLUDE_PATTERNS="${EXCLUDE_PATTERNS:-}"
 INCLUDE_PATTERNS="${INCLUDE_PATTERNS:-}"
 EXCLUDE_FILE="${EXCLUDE_FILE:-}"
 INCLUDE_FILE="${INCLUDE_FILE:-}"
 
-# Tableaux pour stocker les patterns
+# Tableaux pour stocker les patterns (mutables par design)
 declare -a EXCLUDE_PATTERNS_ARRAY
 declare -a INCLUDE_PATTERNS_ARRAY
 
+# Fonction pour obtenir les informations du module
+get_filters_module_info() {
+    echo "Module: $FILTERS_MODULE_NAME"
+    echo "Version: $FILTERS_VERSION"
+    echo "Patterns: ${#EXCLUDE_PATTERNS_ARRAY[@]} exclusion, ${#INCLUDE_PATTERNS_ARRAY[@]} inclusion"
+}
+
 # Initialise le module de filtrage
 filters_init() {
+    # Vérifier les dépendances externes
+    if ! command -v jq &> /dev/null; then
+        log_error "jq n'est pas installé. Le module de filtrage nécessite jq."
+        return 1
+    fi
+    
+    if ! command -v base64 &> /dev/null; then
+        log_error "base64 n'est pas installé. Le module de filtrage nécessite base64."
+        return 1
+    fi
+    
     # Vider les tableaux
     EXCLUDE_PATTERNS_ARRAY=()
     INCLUDE_PATTERNS_ARRAY=()
@@ -102,6 +130,12 @@ filters_match_pattern() {
     local name="$1"
     local pattern="$2"
     
+    # Limiter la longueur du pattern pour prévenir les attaques
+    if [ ${#pattern} -gt 100 ]; then
+        log_debug "Pattern trop long, rejeté: ${pattern:0:50}..."
+        return 1
+    fi
+    
     # Pattern exact
     if [ "$name" = "$pattern" ]; then
         return 0
@@ -109,6 +143,8 @@ filters_match_pattern() {
     
     # Pattern glob (avec *)
     if [[ "$pattern" == *"*"* ]]; then
+        # shellcheck disable=SC2053
+        # Pattern sans quotes nécessaire pour activer le glob matching
         if [[ "$name" == $pattern ]]; then
             return 0
         fi
@@ -116,15 +152,43 @@ filters_match_pattern() {
     
     # Pattern regex (commence par ^ et finit par $)
     if [[ "$pattern" =~ ^\^.*\$$ ]]; then
-        if [[ "$name" =~ $pattern ]]; then
-            return 0
+        # Protection ReDoS avec timeout (seulement si pattern suspect)
+        if [[ "$pattern" =~ (\)\+|\+\+|\.\.+).* ]]; then
+            # Pattern potentiellement dangereux : utiliser timeout
+            if timeout 0.1 bash -c "[[ \"test\" =~ $pattern ]]" 2>/dev/null; then
+                if [[ "$name" =~ $pattern ]]; then
+                    return 0
+                fi
+            else
+                log_debug "Pattern regex complexe ou invalide (possible ReDoS): ${pattern:0:50}..."
+                return 1
+            fi
+        else
+            # Pattern simple : pas besoin de timeout
+            if [[ "$name" =~ $pattern ]]; then
+                return 0
+            fi
         fi
     fi
     
     # Pattern regex simple
     if [[ "$pattern" =~ ^[^a-zA-Z0-9_-] ]]; then
-        if [[ "$name" =~ $pattern ]]; then
-            return 0
+        # Protection ReDoS avec timeout (seulement si pattern suspect)
+        if [[ "$pattern" =~ (\)\+|\+\+|\.\.+).* ]]; then
+            # Pattern potentiellement dangereux : utiliser timeout
+            if timeout 0.1 bash -c "[[ \"test\" =~ $pattern ]]" 2>/dev/null; then
+                if [[ "$name" =~ $pattern ]]; then
+                    return 0
+                fi
+            else
+                log_debug "Pattern regex complexe ou invalide (possible ReDoS): ${pattern:0:50}..."
+                return 1
+            fi
+        else
+            # Pattern simple : pas besoin de timeout
+            if [[ "$name" =~ $pattern ]]; then
+                return 0
+            fi
         fi
     fi
     
@@ -141,14 +205,16 @@ filters_filter_repos() {
         return 0
     fi
     
-    log_info "Filtrage des dépôts..."
+    # Logger vers stderr pour ne pas polluer stdout
+    log_info "Filtrage des dépôts..." >&2
     
     local total_count
     total_count=$(echo "$repos_json" | jq 'length')
     local filtered_count=0
     
-    # Traiter chaque dépôt
-    echo "$repos_json" | jq -r '.[] | @base64' | while read -r repo_b64; do
+    # Traiter chaque dépôt (correction bug subshell)
+    # Utilisation de process substitution au lieu de pipe pour éviter le subshell
+    while IFS= read -r repo_b64; do
         local repo
         repo=$(echo "$repo_b64" | base64 -d)
         
@@ -161,9 +227,10 @@ filters_filter_repos() {
             filtered_repos=$(echo "$filtered_repos" | jq ". + [$repo]")
             filtered_count=$((filtered_count + 1))
         fi
-    done
+    done < <(echo "$repos_json" | jq -r '.[] | @base64')
     
-    log_success "Filtrage terminé: $filtered_count/$total_count dépôts conservés"
+    # Logger vers stderr pour ne pas polluer stdout
+    log_success "Filtrage terminé: $filtered_count/$total_count dépôts conservés" >&2
     
     echo "$filtered_repos"
     return 0
@@ -238,18 +305,25 @@ filters_validate_pattern() {
         return 1
     fi
     
+    # Limiter la longueur du pattern
+    if [ ${#pattern} -gt 100 ]; then
+        return 1
+    fi
+    
     # Vérifier si c'est un pattern regex valide
     if [[ "$pattern" =~ ^\^.*\$$ ]]; then
-        if ! [[ "test" =~ $pattern ]]; then
+        # Test simple sans timeout pour validation
+        if [[ "test" =~ $pattern ]] 2>/dev/null; then
+            : # Pattern valide
+        else
             return 1
         fi
     fi
     
     # Vérifier si c'est un pattern glob valide
     if [[ "$pattern" == *"*"* ]]; then
-        if ! [[ "test" == $pattern ]]; then
-            return 1
-        fi
+        # Glob patterns sont toujours valides (matching dynamique)
+        : # Pattern valide
     fi
     
     return 0
@@ -273,4 +347,12 @@ filters_setup() {
     
     log_success "Module de filtrage initialisé avec succès"
     return 0
+}
+
+# Statistiques de filtrage
+get_filter_stats() {
+    echo "Filter Statistics:"
+    echo "  Enabled: ${FILTER_ENABLED:-false}"
+    echo "  Include patterns: ${FILTER_INCLUDE_PATTERNS:-0}"
+    echo "  Exclude patterns: ${FILTER_EXCLUDE_PATTERNS:-0}"
 }

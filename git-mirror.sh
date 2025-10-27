@@ -39,6 +39,7 @@ success_repos=0
 failed_repos=0
 total_repos=0
 counter=0
+NO_CACHE=false
 
 # Réinitialiser PROFILING_ENABLED après le chargement du module (pour éviter readonly)
 PROFILING_ENABLED="${PROFILING_ENABLED:-false}"
@@ -76,6 +77,9 @@ show_help() {
     echo "  --dry-run                Simulation sans actions réelles"
     echo "  --profile                Active le profiling de performance"
     echo "  --skip-count             Éviter le calcul du nombre total de dépôts (utile si limite API)"
+    echo "  --no-cache               Désactiver l'utilisation du cache API (forcer les appels API)"
+    echo "  --repo-type TYPE         Type de dépôts à récupérer : all, public, private (défaut: all)"
+    echo "  --exclude-forks          Exclure les dépôts forké de la récupération"
     echo "  -h, --help               Afficher cette aide"
     echo ""
     echo "Exemples:"
@@ -87,6 +91,9 @@ show_help() {
     echo "  $0 -q users microsoft"
     echo "  $0 --resume users microsoft"
     echo "  $0 --incremental users microsoft"
+    echo "  $0 --repo-type private users ZarTek-Creole"
+    echo "  $0 --repo-type public users ZarTek-Creole"
+    echo "  $0 --exclude-forks users ZarTek-Creole"
     echo ""
     echo "Dépendances:"
     echo "  Obligatoires: git >= 2.25, jq >= 1.6, curl >= 7.68"
@@ -214,6 +221,25 @@ should_resume() {
 
 # Traitement des options avec getopts
 parse_options() {
+    # Traiter les options combinées comme -vv ou -v -v
+    local processed_args=()
+    while [[ $# -gt 0 ]]; do
+        if [[ "$1" =~ ^-v+$ ]]; then
+            # Compter le nombre de v
+            local v_count
+            v_count=$(grep -o 'v' <<< "$1" | wc -l)
+            for ((i=0; i<v_count; i++)); do
+                processed_args+=("-v")
+            done
+        else
+            processed_args+=("$1")
+        fi
+        shift
+    done
+    
+    # Réinitialiser les arguments traités
+    set -- "${processed_args[@]}"
+    
     while [[ $# -gt 0 ]]; do
         case $1 in
             -d|--destination)
@@ -334,6 +360,28 @@ parse_options() {
                 SKIP_COUNT=true
                 shift
                 ;;
+            --no-cache)
+                NO_CACHE=true
+                shift
+                ;;
+            --repo-type)
+                if [ $# -lt 2 ] || [ -z "$2" ] || [[ "$2" =~ ^- ]]; then
+                    log_fatal "L'option --repo-type nécessite un argument (all, public, private)"
+                fi
+                REPO_TYPE="$2"
+                case "$REPO_TYPE" in
+                    all|public|private)
+                        ;;
+                    *)
+                        log_fatal "Type de dépôt invalide: $REPO_TYPE (options: all, public, private)"
+                        ;;
+                esac
+                shift 2
+                ;;
+            --exclude-forks)
+                EXCLUDE_FORKS=true
+                shift
+                ;;
             -h|--help)
                 show_help
                 exit 0
@@ -417,7 +465,11 @@ main() {
         fi
     fi
     
-    log_debug "Token GitHub final: ${GITHUB_TOKEN:+présent} ${GITHUB_TOKEN:-absent}"
+    if [ -n "${GITHUB_TOKEN:-}" ]; then
+        log_debug "Token GitHub final: présent (longueur: ${#GITHUB_TOKEN})"
+    else
+        log_debug "Token GitHub final: absent"
+    fi
     
     # Initialiser l'authentification
     if ! auth_setup; then
@@ -425,7 +477,12 @@ main() {
         exit 1
     fi
     
-    # Initialiser l'API GitHub
+    # Initialiser l'API GitHub (passer l'option --no-cache si activée)
+    if [ "$NO_CACHE" = true ]; then
+        export API_CACHE_DISABLED=true
+        log_info "Mode --no-cache activé: le cache API sera ignoré"
+    fi
+    
     if ! api_setup; then
         log_error "Échec de l'initialisation de l'API GitHub"
         exit 1
@@ -563,10 +620,17 @@ main() {
         log_dry_run "Vérification de l'espace disque (simulation)"
     fi
     
-    # Créer le répertoire de destination
+    # Créer le répertoire de destination et convertir en chemin absolu
     if [ "$DRY_RUN" = false ]; then
         if ! mkdir -p "$DEST_DIR"; then
             log_fatal "Impossible de créer le répertoire de destination: $DEST_DIR"
+        fi
+        
+        # Convertir DEST_DIR en chemin absolu pour éviter les problèmes en mode parallel
+        # Les sous-processus peuvent changer de répertoire courant
+        if [ -d "$DEST_DIR" ]; then
+            DEST_DIR=$(cd "$DEST_DIR" && pwd)
+            log_debug "Répertoire de destination (absolu): $DEST_DIR"
         fi
     else
         log_dry_run "Création du répertoire de destination: $DEST_DIR"
@@ -596,6 +660,14 @@ main() {
         exit 1
     fi
     
+    # Mettre à jour le nombre total de dépôts avec le nombre réel récupéré
+    local actual_repos_count
+    actual_repos_count=$(echo "$repos_json" | jq 'length')
+    if [ "$actual_repos_count" -gt 0 ]; then
+        total_repos=$actual_repos_count
+        log_debug "Nombre réel de dépôts récupérés: $total_repos"
+    fi
+    
     # En mode incrémental, filtrer les dépôts modifiés
     local repos_to_process
     if [ "$INCREMENTAL" = true ]; then
@@ -609,13 +681,30 @@ main() {
         filtered_count=$(echo "$repos_to_process" | wc -l)
         log_info "Mode incrémental: $filtered_count dépôts modifiés depuis $last_sync"
     else
-        repos_to_process=$(echo "$repos_json" | jq -r '.[].clone_url')
+        # Filtrer les forks si --exclude-forks est activé
+        if [ "$EXCLUDE_FORKS" = true ]; then
+            repos_to_process=$(echo "$repos_json" | jq -r '.[] | select(.fork == false) | .clone_url')
+            local forks_excluded
+            forks_excluded=$(echo "$repos_json" | jq '[.[] | select(.fork == true)] | length')
+            log_info "Mode exclude-forks: $forks_excluded dépôts forké exclus"
+        else
+            repos_to_process=$(echo "$repos_json" | jq -r '.[].clone_url')
+        fi
     fi
     
     # Traiter les dépôts (séquentiel ou parallèle)
     if [ "$PARALLEL_ENABLED" = "true" ] && [ "$PARALLEL_JOBS" -gt 1 ] && [ "$DRY_RUN" = false ]; then
         # Mode parallèle avec GNU parallel
         log_info "Traitement parallèle de $(echo "$repos_to_process" | wc -l) dépôts avec $PARALLEL_JOBS jobs"
+        
+        # Initialiser toutes les variables avant le wrapper pour éviter "empty string"
+        # Note: DEST_DIR a déjà été converti en chemin absolu plus haut
+        BRANCH="${BRANCH:-}"
+        DEPTH="${DEPTH:-1}"
+        FILTER="${FILTER:-}"
+        SINGLE_BRANCH="${SINGLE_BRANCH:-false}"
+        NO_CHECKOUT="${NO_CHECKOUT:-false}"
+        GITHUB_AUTH_METHOD="${GITHUB_AUTH_METHOD:-public}"
         
         # Créer une fonction wrapper pour parallel
         _process_repo_wrapper() {
@@ -663,7 +752,7 @@ main() {
         export -f _process_repo_wrapper repository_exists update_repository clone_repository
         export -f auth_transform_url filters_should_process log_info log_success log_error log_debug _log_message
         export -f _execute_git_command _configure_safe_directory _update_submodules _update_branch
-        export DEST_DIR BRANCH DEPTH FILTER SINGLE_BRANCH NO_CHECKOUT GITHUB_AUTH_METHOD VERBOSE_LEVEL QUIET_MODE
+        export DEST_DIR="${DEST_DIR:-./repositories}" BRANCH DEPTH FILTER SINGLE_BRANCH NO_CHECKOUT GITHUB_AUTH_METHOD VERBOSE_LEVEL QUIET_MODE
         export FILTER_ENABLED=${FILTER_ENABLED:-false}
         export DRY_RUN=${DRY_RUN:-false}
         

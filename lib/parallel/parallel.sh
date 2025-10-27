@@ -201,6 +201,23 @@ parallel_cleanup() {
     fi
 }
 
+# Statistiques de parallélisation
+get_parallel_stats() {
+    local total_jobs="${PARALLEL_JOBS:-1}"
+    local enabled="${PARALLEL_ENABLED:-false}"
+    
+    echo "Parallel Statistics:"
+    echo "  Enabled: $enabled"
+    echo "  Jobs: $total_jobs"
+    echo "  Timeout: ${PARALLEL_TIMEOUT:-300}s"
+    
+    if [ "$enabled" = "true" ]; then
+        echo "  Mode: Multi-process parallelization"
+    else
+        echo "  Mode: Sequential execution"
+    fi
+}
+
 # Fonction principale d'initialisation du module de parallélisation
 parallel_setup() {
     if ! parallel_init; then
