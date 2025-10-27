@@ -7,6 +7,8 @@ assignees: ''
 
 ---
 
+> 📋 **Avant de soumettre** : Consultez le [Guide de Contribution](CONTRIBUTING.md) pour connaître les standards du projet.
+
 ## Description
 
 Brève description des changements apportés.

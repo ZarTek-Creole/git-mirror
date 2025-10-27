@@ -35,13 +35,28 @@ Ce projet adhère à un code de conduite basé sur le respect mutuel et la colla
 ### 2. Configuration de l'Environnement
 
 1. Installez les dépendances :
+
    ```bash
+   # Option 1 : Utiliser le script d'installation
    ./install.sh --deps
+   
+   # Option 2 : Utiliser le Makefile
+   make install-deps
+   
+   # Option 3 : Installation manuelle
+   sudo apt-get update && sudo apt-get install -y jq parallel git curl bash
    ```
 
 2. Exécutez les tests pour vérifier que tout fonctionne :
+
    ```bash
+   # Tests complets
    make test
+   
+   # Ou individuellement
+   make test-shellcheck
+   make test-bats
+   make test-integration
    ```
 
 ### 3. Création d'une Branche
@@ -160,86 +175,67 @@ Brève description des changements apportés.
 - [ ] Tests de charge passés
 - [ ] ShellCheck sans erreurs
 
-## Checklist
+Le template complet de Pull Request est disponible dans `.github/pull_request_template.md`. Veuillez l'utiliser lors de la création d'une PR.
 
-- [ ] Mon code respecte les standards du projet
-- [ ] J'ai effectué une auto-révision de mon code
-- [ ] J'ai commenté les parties complexes de mon code
-- [ ] J'ai mis à jour la documentation
-- [ ] Mes changements ne génèrent pas de nouveaux warnings
-- [ ] J'ai ajouté des tests qui prouvent que ma correction est efficace
-- [ ] Les tests passent localement
-- [ ] J'ai mis à jour le CHANGELOG si nécessaire
+## Processus d'Audit Ligne par Ligne
+
+Conformément aux règles strictes du projet, tout travail sur le code nécessite un audit complet :
+
+### Règles Absolues pour Tout Travail sur le Code
+
+1. **UN SEUL MODULE À LA FOIS** : Ne jamais faire de modifications "batch"
+2. **ANALYSE COMPLÈTE LIGNE PAR LIGNE** : 100% des lignes lues et comprises
+3. **AUDIT OBLIGATOIRE AVANT TOUTE MODIFICATION** :
+   - **Audit fonctionnel** : Fonctions, paramètres, dépendances, variables globales
+   - **Analyse qualité** : Complexité cyclomatique, style, gestion erreurs, performance
+   - **Review architecture** : Design Patterns, abstraction, standards projet
+4. **DOCUMENTATION EXHAUSTIVE** : Rapport détaillé avec recommandations
+5. **VALIDATION EXPRESSE REQUISE** : Attendre approbation avant module suivant
+6. **AUCUNE DEADLINE** : La qualité prime TOUJOURS sur la vitesse
+7. **ZÉRO TOLÉRANCE** : Pour approche rapide/superficielle
+
+### Processus pour Chaque Module
+
+1. **Lecture complète** : 100% des lignes du module
+2. **Audit statique** : ShellCheck ligne par ligne
+3. **Review architecture** : Design Patterns appliqués
+4. **Modifications** : UNE modification à la fois, test après chaque modification
+5. **Documentation** : Justification de CHAQUE changement
+6. **Validation finale** : 0 erreur, tests de régression, approbation
+
+### Workflow de Développement avec Branches
+
 ```
+main
+├── feature/nom-feature
+│   └── work/travail-ongoing
+├── fix/nom-fix
+│   └── work/travail-ongoing
+└── refactor/nom-refactor
+    └── work/travail-ongoing
+```
+
+**Convention de nommage** :
+- `feature/` : Nouvelles fonctionnalités
+- `fix/` : Corrections de bugs
+- `refactor/` : Refactorings
+- `docs/` : Documentation uniquement
+- `test/` : Ajout de tests uniquement
+
+**Branches de travail** : Utiliser `work/` pour les travaux en cours sur une branche principale
 
 ## Rapport de Bugs
 
-### Template de Bug Report
+Les templates de rapport Lambda et de demande de fonctionnalité sont disponibles dans `.github/ISSUE_TEMPLATE/`. Veuillez utiliser ces templates lors de la création d'une nouvelle issue.
 
-```markdown
-## Description du Bug
+- [Bug Report Template](.github/ISSUE_TEMPLATE/bug_report.md)
+- [Feature Request Template](.github/ISSUE_TEMPLATE/feature_request.md)
 
-Description claire et concise du bug.
-
-## Étapes pour Reproduire
-
-1. Aller à '...'
-2. Cliquer sur '...'
-3. Faire défiler jusqu'à '...'
-4. Voir l'erreur
-
-## Comportement Attendu
-
-Description claire et concise du comportement attendu.
-
-## Comportement Actuel
-
-Description claire et concise du comportement actuel.
-
-## Environnement
-
-- OS: [ex: Ubuntu 20.04]
-- Version de Bash: [ex: 5.0.17]
-- Version de Git: [ex: 2.25.1]
-- Version de jq: [ex: 1.6]
-- Version de Git Mirror: [ex: 2.0.0]
-
-## Logs
-
-```
-Coller les logs d'erreur ici
-```
-
-## Informations Supplémentaires
-
-Toute autre information pertinente.
-```
-
-## Demande de Fonctionnalités
-
-### Template de Feature Request
-
-```markdown
-## Description de la Fonctionnalité
-
-Description claire et concise de la fonctionnalité souhaitée.
-
-## Problème Résolu
-
-Description du problème que cette fonctionnalité résoudrait.
-
-## Solution Proposée
-
-Description claire et concise de la solution proposée.
-
-## Alternatives Considérées
-
-Description des solutions alternatives considérées.
-
-## Contexte Supplémentaire
-
-Toute autre information pertinente.
-```
+Pour créer une nouvelle issue :
+1. Allez sur la page des issues du projet
+2. Cliquez sur "New Issue"
+3. Sélectionnez le template approprié
+4. Remplissez les informations demandées
 
 ## Processus de Review
 

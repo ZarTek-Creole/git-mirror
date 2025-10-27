@@ -32,7 +32,7 @@ Pour utiliser ce script, vous devez avoir les outils suivants installés sur vot
   - [Télécharger Git](https://git-scm.com/downloads)
 
 - **jq** (version 1.6+) : Manipulation de JSON en ligne de commande
-  - Ubuntu/Debian : `sudo apt-get install 준`
+  - Ubuntu/Debian : `sudo apt-get install jq`
   - CentOS/Fedora : `sudo yum install jq`
   - MacOS : `brew install jq`
   - [Télécharger jq](https://stedolan.github.io/jq/)
@@ -199,7 +199,7 @@ Pour utiliser ce script, vous devez avoir les outils suivants installés sur vot
 
 ```bash
 # Exporter les métriques en JSON
-./git-mirrorolybdenum --metrics metrics.json users ZarTek-Creole
+./git-mirror.sh --metrics metrics.json users ZarTek-Creole
 
 # Exporter en CSV
 ./git-mirror.sh --metrics metrics.csv --profile users ZarTek-Creole
@@ -234,6 +234,41 @@ export GITHUB_AUTH_METHOD="public"
 - `GITHUB_SSH_KEY` : Chemin vers la clé SSH privée
 - `GITHUB_AUTH_METHOD` : Force la méthode d'authentification (`token`, `ssh`, `public`)
 
+## Architecture du Projet
+
+Ce projet utilise une architecture modulaire avec 13 modules spécialisés organisés dans `lib/`. Le script principal `git-mirror.sh` agit comme une façade orchestrant l'ensemble.
+
+📚 **Pour plus de détails techniques** : Consultez [ARCHITECTURE.md](docs/ARCHITECTURE.md)
+
+```
+git-mirror/
+├── git-mirror.sh          # Script principal (928 lignes)
+├── config/                 # Configuration
+│   ├── config.sh          # Config principale (330 lignes)
+│   └── *.conf             # 12 fichiers de config spécialisés
+├── lib/                    # 13 modules fonctionnels (3905 lignes)
+│   ├── api/               # API GitHub
+│   ├── auth/              # Authentification
+│   ├── cache/             # Cache API
+│   ├── filters/           # Filtrage
+│   ├── git/               # Opérations Git
+│   ├── incremental/       # Mode incrémental
+│   ├── interactive/       # Mode interactif
+│   ├── logging/           # Système de logs
+│   ├── metrics/           # Métriques
+│   ├── parallel/          # Parallélisation
+│   ├── state/             # Gestion d'état
+│   ├── utils/             # Utilitaires (profiling)
+│   └── validation/        # Validation
+└── tests/                  # 7 catégories de tests
+    ├── unit/              # Tests unitaires (13 fichiers)
+    ├── integration/       # Tests d'intégration
+    ├── regression/        # Tests de régression
+    ├── load/              # Tests de charge
+    ├── mocks/             # Données mockées
+    └── utils/             # Utilitaires de test
+```
+
 ## Documentation
 
 ### Option --repo-type
@@ -244,7 +279,7 @@ Permet de filtrer les dépôts par type :
 - `public` : Récupère uniquement les dépôts publics
 - `private` : Récupère uniquement les dépôts privés (nécessite authentification)
 
-**Note** : L'authentification est requise pour accéder aux dépôts privés. Si vous n'êtes pas authentifié et que vous utilisez `--repo-type private` ou `--repo-type all` en mode public, Song s programmly basculera en mode public.
+**Note** : L'authentification est requise pour accéder aux dépôts privés. Si vous n'êtes pas authentifié et que vous utilisez `--repo-type private` ou `--repo-type all` en mode public, le script basculera automatiquement en mode public.
 
 ### Option --exclude-forks
 
@@ -292,6 +327,52 @@ Le mode incrémental ne traite que les dépôts modifiés depuis la dernière sy
 ./git-mirror.sh --incremental users ZarTek-Creole
 ```
 
+### Filtres Avancés Combinés
+
+Il est possible de combiner plusieurs filtres pour des synchronisations très précises :
+
+```bash
+# Exclure les forks ET les patterns spécifiques
+./git-mirror.sh --exclude-forks --exclude "old-*" --exclude "deprecated-*" users ZarTek-Creole
+
+# Inclure uniquement les projets spécifiques ET exclure les forks
+./git-mirror.sh --include "project-*" --exclude-forks users ZarTek-Creole
+
+# Combiner type de dépôt, forks et patterns
+./git-mirror.sh --repo-type public --exclude-forks --exclude "test-*" orgs my-org
+
+# Filtres depuis des fichiers
+./git-mirror.sh --include-file important-repos.txt --exclude-file skip-repos.txt users ZarTek-Creole
+```
+
+### Configuration Avancée via Fichiers `.conf`
+
+Le projet inclut 12 fichiers de configuration spécialisés dans `config/` :
+
+- `git-mirror.conf` : Configuration par défaut du script
+- `performance.conf` : Paramètres de performance et parallélisation
+- `security.conf` : Configuration de sécurité
+- `cicd.conf` : Configuration CI/CD
+- `ci.conf` : Configuration d'intégration continue
+- `deployment.conf` : Configuration de déploiement
+- `testing.conf` : Configuration des tests
+- `maintenance.conf` : Configuration de maintenance
+- `dependencies.conf` : Gestion des dépendances
+- `documentation.conf` : Configuration de documentation
+
+Ces fichiers permettent de personnaliser le comportement du script sans modifier le code source.
+
+## Matrice de Compatibilité
+
+| OS | Bash | Git | jq | curl | GNU Parallel | Status |
+|----|------|-----|----|----|-----------|--------|
+| Ubuntu 20.04+ | 5.0+ | 2.25+ | 1.6+ | 7.68+ | Last | ✅ Complet |
+| Debian 11+ | 5.0+ | 2.25+ | 1.6+ | 7.68+ | Last | ✅ Complet |
+| CentOS 8+ | 4.4+ | 2.25+ | 1.6+ | 7.68+ | Last | ✅ Complet |
+| Fedora 34+ | 5.0+ | 2.25+ | 1.6+ | 7.68+ | Last | ✅ Complet |
+| macOS 11+ | 3.2+ | 2.25+ | 1.6+ | 7.64+ | Last | ✅ Complet |
+| Alpine Linux | 5.0+ | 2.25+ | 1.6+ | 7.68+ | Last | ⚠️ Requiert setup |
+
 ## Notes importantes
 
 - Le script utilise l'API GitHub pour récupérer la liste des dépôts
@@ -305,41 +386,154 @@ Le mode incrémental ne traite que les dépôts modifiés depuis la dernière sy
 
 - Ce script fonctionne uniquement sur les systèmes Unix/Linux/macOS (nécessite bash 4.0+)
 - Il définit un délai d'expiration de 30 secondes par défaut pour les commandes git (configurable via `--timeout`)
-- Le mode puzzle parallèle nécessite GNU parallel
+- Le mode parallèle nécessite GNU parallel
 
 ## Problèmes courants et solutions
 
 ### Erreur "jq command not found"
 
-**Solution** : Installer jq selon votre système d'exploitation (voir section Dépendances)
+**Solution** : Installer jq selon votre système d'exploitation :
+
+```bash
+# Ubuntu/Debian
+sudo apt-get update && sudo apt-get install -y jq
+
+# CentOS/RHEL
+sudo yum install -y jq
+
+# macOS
+brew install jq
+```
 
 ### Erreur "git command not found"
 
-**Solution** : Installer git selon votre système d'exploitation (voir section Dépendances)
+**Solution** : Installer git selon votre système d'exploitation :
+
+```bash
+# Ubuntu/Debian
+sudo apt-get update && sudo apt-get install -y git
+
+# CentOS/RHEL
+sudo yum install -y git
+
+# macOS
+brew install git
+```
 
 ### Erreur "curl command not found"
 
-**Solution** : Installer curl selon votre système d'exploitation (voir section Dépendances)
+**Solution** : Installer curl selon votre système d'exploitation :
+
+```bash
+# Ubuntu/Debian
+sudo apt-get update && sudo apt-get install -y curl
+
+# CentOS/RHEL
+sudo yum install -y curl
+
+# macOS
+brew install curl
+```
 
 ### Erreur "Permission denied" lors du clonage
 
-**Solution** : Vérifier que vous avez les permissions d'écriture dans le répertoire de destination
+**Solution** : Vérifier les permissions et corriger si nécessaire :
+
+```bash
+# Vérifier les permissions du répertoire de destination
+ls -la ./repositories
+
+# Corriger les permissions
+chmod 755 ./repositories
+chown -R $USER:$USER ./repositories
+```
 
 ### Erreur "Repository not found"
 
-**Solution** : Vérifier que le nom d'utilisateur ou d'organisation est correct et que les dépôts sont publics ou que vous avez les permissions d'accès. Pour les dépôts privés, utiliser l'authentification.
+**Causes possibles** :
+- Nom d'utilisateur ou d'organisation incorrect
+- Dépôt privé sans authentification
+- Dépôt supprimé ou déplacé
+
+**Solution** : 
+```bash
+# Pour les dépôts privés, utiliser l'authentification
+export GITHUB_TOKEN="ghp_xxxxxxxxxxxx"
+./git-mirror.sh users ZarTek-Creole
+
+# Vérifier le nom d'utilisateur sur GitHub
+curl https://api.github.com/users/ZarTek-Creole
+```
 
 ### Erreur "API rate limit exceeded"
 
-**Solution** : Attendre que la limite de taux soit réinitialisée ou utiliser un token GitHub pour augmenter la limite (5000 requêtes/heure avec token vs 60 sans token)
+**Information** : 
+- Sans token : 60 requêtes/heure (rate limit API publique)
+- Avec token : 5000 requêtes/heure (rate limit API authentifié)
+
+**Solution** : 
+
+```bash
+# Configurer un token GitHub
+export GITHUB_TOKEN="ghp_xxxxxxxxxxxx"
+./git-mirror.sh users ZarTek-Creole
+
+# Vérifier votre usage actuel
+curl -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/rate_limit
+```
 
 ### Erreur "fatal: destination path already exists"
 
-**Solution** : Le script gère automatiquement ce cas en nettoyant les répertoires partiellement clonés. Ce problème ne devrait plus se produire dans les versions récentes.
+**Cause** : Un clone précédent a été interrompu
+
+**Solution** : Le script gère automatiquement ce cas depuis v2.0. Si le problème persiste :
+
+```bash
+# Nettoyer manuellement si nécessaire
+rm -rf ./repositories/problematic-repo
+
+# Relancer le script
+./git-mirror.sh users ZarTek-Creole
+```
 
 ### Erreur de submodules en mode shallow
 
-**Solution** : Les submodules sont automatiquement désactivés pour les clones shallow (`--depth 1`) pour éviter les erreurs de référence.
+**Cause** : Les submodules ne sont pas supportés en mode shallow clonage
+
+**Solution** : Automatiquement géré par le script
+
+```bash
+# Avec --depth, les submodules sont désactivés automatiquement
+./git-mirror.sh --depth 1 users ZarTek-Creole
+
+# Pour activer les submodules, utiliser sans --depth
+./git-mirror.sh users ZarTek-Creole
+```
+
+### Erreur "parallel command not found"
+
+**Cause** : GNU parallel n'est pas installé
+
+**Solution** : Installer GNU parallel :
+
+```bash
+# Ubuntu/Debian
+sudo apt-get install -y parallel
+
+# CentOS/RHEL
+sudo yum install -y parallel
+
+# macOS
+brew install parallel
+```
+
+**Alternative** : Utiliser sans parallélisation (plus lent) :
+
+```bash
+./git-mirror.sh users ZarTek-Creole
+# Ou explicitement
+./git-mirror.sh --parallel 1 users ZarTek-Creole
+```
 
 ## Contributions
 
@@ -361,7 +555,7 @@ Ce projet est sous licence MIT. Voir le fichier [LICENSE](LICENSE) pour plus de 
 
 ## Donations
 
-Si ce projet vous a aidé et queใด souhaitez le soutenir, vous pouvez faire un don via les plateformes suivantes :
+Si ce projet vous a aidé et que vous souhaitez le soutenir, vous pouvez faire un don via les plateformes suivantes :
 
 - **GitHub Sponsors** : [Soutenir sur GitHub](https://github.com/sponsors/ZarTek-Creole)
 - **Ko-fi** : [Faire un don sur Ko-fi](https://ko-fi.com/zartek)
