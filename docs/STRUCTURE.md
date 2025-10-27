@@ -1,95 +1,197 @@
-# Structure Finale du Projet Git Mirror
+# Structure du Projet Git Mirror v2.0.0
 
 ## 📁 Organisation des Fichiers
 
 ```text
 git-mirror/
-├── git-mirror.sh                    # Script principal (modulaire)
-├── README.md                        # Documentation principale
-├── archive/
-│   └── git-mirror-legacy.sh        # Ancien script monolithique (backup)
+├── git-mirror.sh                    # Script principal (~915 lignes)
+│   └── Facade orchestrant tous les modules
+│
+├── README.md                        # Documentation principale complète
+├── CONTRIBUTING.md                  # Guide de contribution
+├── LICENSE                          # Licence MIT
+│
 ├── config/
 │   └── config.sh                   # Configuration centralisée
-├── docs/
-│   ├── ARCHITECTURE.md             # Documentation de l'architecture
-│   └── phases/
-│       └── PHASE_2_1_SUMMARY.md    # Résumé de la Phase 2.1
-├── lib/                            # Modules fonctionnels
-│   ├── api/
-│   │   └── github_api.sh          # Module API GitHub
-│   ├── auth/
-│   │   └── auth.sh                # Module d'authentification
-│   ├── cache/
-│   │   └── cache.sh               # Module de cache
-│   ├── git/
-│   │   └── git_ops.sh             # Module opérations Git
+│       ├── Chemins par défaut
+│       ├── Options Git
+│       ├── Variables d'environnement
+│       └── Paramètres globaux
+│
+├── lib/                            # Modules fonctionnels (12 modules)
 │   ├── logging/
-│   │   └── logger.sh              # Module de logging
-│   └── validation/
-│       └── validation.sh           # Module de validation
-├── tests/
+│   │   └── logger.sh              # Système de logging avec couleurs
+│   │
+│   ├── auth/
+│   │   └── auth.sh                # Authentification multi-méthodes
+│   │       ├── Token GitHub
+│   │       ├── Clés SSH
+│   │       └── Mode public
+│   │
+│   ├── api/
+│   │   └── github_api.sh         # API GitHub
+│   │       ├── Pagination
+│   │       ├── Rate limiting
+│   │       ├── Cache
+│   │       └── Types de dépôts
+│   │
+│   ├── git/
+│   │   └── git_ops.sh            # Opérations Git
+│   │       ├── Clone
+│   │       ├── Pull
+│   │       ├── Submodules
+│   │       └── Statistiques
+│   │
+│   ├── cache/
+│   │   └── cache.sh              # Cache API
+│   │       ├── TTL configurable
+│   │       └── Invalidation
+│   │
+│   ├── filters/
+│   │   └── filters.sh            # Filtrage avancé
+│   │       ├── Patterns glob
+│   │       ├── Inclusion/Exclusion
+│   │       └── Fichiers de patterns
+│   │
+│   ├── parallel/
+│   │   └── parallel.sh           # Parallélisation
+│   │       ├── GNU parallel
+│   │       └── Agrégation résultats
+│   │
+│   ├── metrics/
+│   │   └── metrics.sh            # Métriques
+│   │       ├── Export JSON
+│   │       ├── Export CSV
+│   │       └── Export HTML
+│   │
+│   ├── interactive/
+│   │   └── interactive.sh        # Mode interactif
+│   │
+│   ├── state/
+│   │   └── state.sh              # Gestion d'état
+│   │       └── Mode resume
+│   │
+│   ├── incremental/
+│   │   └── incremental.sh        # Mode incrémental
+│   │       └── Based on pushed_at
+│   │
+│   └── profiling/
+│       └── profiling.sh           # Profiling
+│
+├── tests/                          # Tests
 │   └── unit/
-│       └── test_modules.sh        # Tests unitaires complets
-└── .github/
-    └── workflows/
-        └── test-architecture.yml  # GitHub Actions
+│       └── test_filters_new.bats # Tests Bats
+│
+├── docs/                           # Documentation
+│   ├── ARCHITECTURE.md            # Architecture du projet
+│   └── STRUCTURE.md              # Ce fichier
+│
+├── reports/                        # Rapports
+│   ├── CONSOLIDATED-FINAL-REPORT.md  # Rapport consolidé
+│   ├── option-exclude-forks-final.md  # Option --exclude-forks
+│   ├── git-mirror-fixes-summary.md    # Corrections
+│   ├── git-mirror-parallel-issues-analysis.md  # Problèmes parallèles
+│   ├── missing-repos-analysis.md       # Dépôts manquants
+│   ├── test-repo-types-validation.md   # Validation repo-type
+│   │
+│   ├── phase1/                    # Rapports Phase 1
+│   │   ├── audit-summary.md
+│   │   ├── validation-finale.md
+│   │   └── ...
+│   │
+│   └── phase2/                    # Rapports Phase 2
+│       ├── api-fix-documentation.md
+│       ├── filters-audit-complet.md
+│       ├── git_ops-audit-complet.md
+│       └── ...
+│
+├── .git-mirror-cache/             # Cache (généré, pas dans Git)
+│   ├── api/                       # Cache API
+│   └── metadata/                  # Métadonnées
+│
+└── .gitignore                     # Fichiers ignorés
 ```
 
-## ✅ Fichiers à la Racine (Corrects)
+## 📊 Statistiques du Projet
 
-- **`git-mirror.sh`** ✅ - Script principal
-- **`README.md`** ✅ - Documentation principale
+### Fichiers Principaux
+| Fichier | Lignes | Description |
+|---------|--------|-------------|
+| `git-mirror.sh` | ~915 | Script principal (facade) |
+| `config/config.sh` | ~100 | Configuration |
+| Total modules `lib/` | ~3000+ | 12 modules fonctionnels |
 
-## ✅ Fichiers dans les Répertoires (Corrects)
+### Distribution du Code
+```
+Configuration  : ~3%
+Orchestration  : ~25%
+Modules        : ~70%
+Documentation  : ~2%
+```
 
-- **`config/config.sh`** ✅ - Configuration
-- **`lib/*/`** ✅ - Modules fonctionnels
-- **`tests/unit/`** ✅ - Tests
-- **`docs/`** ✅ - Documentation technique
-- **`archive/`** ✅ - Anciens fichiers
+## 🔑 Points Clés
 
-## 🧹 Nettoyage Effectué
+### Séparation des Responsabilités
+- **git-mirror.sh** : Orchestration uniquement
+- **lib/** : Logique métier
+- **config/** : Configuration
+- **tests/** : Tests
 
-### ❌ Fichiers Supprimés (Obsolètes)
+### Imports de Modules
+```bash
+# Dans git-mirror.sh
+source "${SCRIPT_DIR}/config/config.sh"
+source "${SCRIPT_DIR}/lib/logging/logger.sh"
+source "${SCRIPT_DIR}/lib/auth/auth.sh"
+# ... etc
+```
 
-- `test_architecture.sh` - Script de test temporaire
-- `tests/unit/test_modules_simple.sh` - Tests unitaires en doublon
-- `tests/integration/` - Répertoire vide
-- `config/default.conf` - Configuration obsolète
-- `config/git-mirror.conf` - Configuration obsolète
-- `lib/cache.sh` - Ancien module cache
-- `lib/dependencies.sh` - Ancien module dépendances
-- `lib/logger.sh` - Ancien module logger
-- `lib/state.sh` - Ancien module state
-- `lib/validator.sh` - Ancien module validator
+### Variables d'Environnement
+- Chargées depuis `config/config.sh`
+- Surchargées par les arguments CLI
+- Exportées pour les sous-processus
 
-### 📁 Fichiers Déplacés (Réorganisés)
+### Chemins Absolus
+- Tous les chemins sont normalisés en absolus
+- Nécessaire pour le mode parallèle
+- Empêche les erreurs "Invalid path"
 
-- `PHASE_2_1_SUMMARY.md` → `docs/phases/`
-- `ARCHITECTURE.md` → `docs/`
-- `git-mirror-legacy.sh` → `archive/`
+## ✅ Nettoyage Effectué
 
-## 🎯 Structure Finale - Propre et Cohérente
+### Fichiers Supprimés
+- `reports/test-results-final.md` → Consolidé
+- `reports/tests-final-results.md` → Consolidé
+- `reports/final-report-100-percent.md` → Consolidé
+- `reports/validation-complete-summary.md` → Consolidé
+- `reports/final-analysis.md` → Consolidé
 
-### ✅ Avantages de cette Organisation
+### Fichiers Conservés
+- `reports/CONSOLIDATED-FINAL-REPORT.md` : Rapport final unique
+- `reports/option-exclude-forks-final.md` : Documentation option
+- `reports/git-mirror-fixes-summary.md` : Historique des corrections
+- `reports/phase1/` et `phase2/` : Rapports d'audit historiques
 
-1. **Clarté** - Chaque fichier a sa place logique
-2. **Maintenabilité** - Structure facile à comprendre
-3. **Évolutivité** - Facile d'ajouter de nouveaux modules
-4. **Documentation** - Docs techniques séparées de la doc principale
-5. **Tests** - Tests organisés par type
-6. **Archivage** - Anciens fichiers préservés mais séparés
+## 🎯 Bonnes Pratiques
 
-### 📊 Métriques Finales
+### Nommage
+- Modules : `MODULE_NAME.sh`
+- Fonctions : `module_function_name()`
+- Variables locales : `local_var`
+- Variables globales : `GLOBAL_VAR`
 
-- **Scripts principaux** : 1 (git-mirror.sh)
-- **Modules fonctionnels** : 6 (lib/)
-- **Tests** : 2 suites
-- **Documentation** : 3 fichiers
-- **Archives** : 1 fichier
-- **Configuration** : 1 fichier
+### Documentation
+- Commentaires JSDoc-style pour fonctions
+- README.md pour utilisateurs
+- ARCHITECTURE.md pour développeurs
+- STRUCTURE.md pour compréhension du projet
+
+### Tests
+- Un fichier de test par module
+- Tests unitaires dans `tests/unit/`
+- Utilisation de Bats framework
 
 ---
-**Status** : ✅ **Structure propre et cohérente**  
-**Date** : 2025-10-25  
-**Validation** : Tous les fichiers à leur place logique
+
+**Version** : 2.0.0  
+**Date** : 2025-10-27  
+**Status** : Production Ready
