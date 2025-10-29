@@ -47,6 +47,7 @@ desktop.ini
 # Éditeurs
 .vscode/
 .idea/
+.cursor/
 *.swp
 *.swo
 *~
@@ -149,9 +150,3 @@ incremental/
 *.profile
 profilage/.shellspec-quick.log
 .shellspec
-
-# ===========================================
-# Artefacts de tests
-# ===========================================
-gem_p/
-symfony-vue/

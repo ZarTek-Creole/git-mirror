@@ -157,6 +157,21 @@ log_fatal() {
     exit 1
 }
 
+# Fonction error() centralisée (compatibilité avec patterns standards)
+# Usage: error "Message d'erreur" [exit_code]
+error() {
+    local message="$1"
+    local exit_code="${2:-1}"
+    
+    log_error "$message"
+    exit "$exit_code"
+}
+
+# Fonction warn() centralisée (compatibilité avec patterns standards)
+warn() {
+    log_warning "$*"
+}
+
 # Fonction pour afficher le statut du module
 logger_status() {
     echo "Logger Module Status:"
@@ -203,4 +218,4 @@ log_success_stderr() {
 export -f init_logger log_error log_warning log_info log_success log_debug \
   log_trace log_dry_run log_fatal logger_status log_error_stderr \
   log_warning_stderr log_debug_stderr log_info_stderr log_success_stderr \
-  _log_message
+  error warn _log_message

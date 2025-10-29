@@ -1,460 +1,623 @@
-# Architecture Git Mirror v2.0.0
-
-## 📁 Structure du Projet
-
-```text
-git-mirror/
-├── git-mirror.sh                    # Script principal (modulaire, ~928 lignes)
-├── README.md                        # Documentation principale
-├── CONTRIBUTING.md                  # Guide de contribution
-├── LICENSE                          # Licence MIT
-│
-├── config/                          # Configuration
-│   ├── config.sh                   # Configuration centralisée
-│   ├── git-mirror.conf            # Config par défaut
-│   ├── performance.conf           # Config performance
-│   ├── security.conf              # Config sécurité
-│   ├── cicd.conf                  # Config CI/CD
-│   ├── ci.conf                    # Config CI
-│   ├── deployment.conf            # Config déploiement
-│   ├── testing.conf               # Config tests
-│   ├── maintenance.conf           # Config maintenance
-│   ├── dependencies.conf          # Gestion dépendances
-│   ├── documentation.conf         # Config documentation
-│   └── docs.conf                  # Config docs
-│
-├── lib/                            # Modules fonctionnels
-│   ├── logging/
-│   │   └── logger.sh              # Système de logging
-│   ├── auth/
-│   │   └── auth.sh                # Authentification (token, SSH, public)
-│   ├── api/
-│   │   └── github_api.sh         # API GitHub (pagination, cache, rate limits)
-│   ├── git/
-│   │   └── git_ops.sh            # Opérations Git (clone, pull, stats)
-│   ├── cache/
-│   │   └── cache.sh              # Cache API avec TTL
-│   ├── filters/
-│   │   └── filters.sh            # Filtrage par patterns
-│   ├── parallel/
-│   │   └── parallel.sh           # Parallélisation avec GNU parallel
-│   ├── metrics/
-│   │   └── metrics.sh            # Métriques et statistiques
-│   ├── interactive/
-│   │   └── interactive.sh        # Mode interactif
-│   ├── state/
-│   │   └── state.sh              # Gestion d'état (resume)
-│   ├── incremental/
-│   │   └── incremental.sh        # Mode incrémental
-│   ├── utils/
-│   │   └── profiling.sh           # Profiling de performance
-│   └── validation/
-│       └── validation.sh          # Validation des entrées
-│
-├── tests/                          # Tests (7 catégories)
-│   ├── unit/                      # Tests unitaires (13 fichiers .bats)
-│   ├── integration/               # Tests d'intégration
-│   ├── regression/                # Tests de régression
-│   ├── load/                      # Tests de charge
-│   ├── mocks/                     # Données mockées
-│   └── utils/                     # Utilitaires de test
-│
-├── docs/                           # Documentation technique
-│   └── ARCHITECTURE.md            # Ce fichier (architecture complète)
-│
-├── reports/                        # Rapports d'analyse (historiques)
-│
-├── .git-mirror-cache/             # Cache API (généré)
-│   ├── api/
-│   └── metadata/
-│
-└── .gitignore                     # Fichiers ignorés par Git
-```
-
-## 🔄 Architecture Modulaire ✅
-- **Fichier principal** : `git-mirror.sh` (~928 lignes, facade pattern)
-- **Modules** : 13 modules spécialisés dans `lib/`
-- **Configuration** : Centralisée dans `config/`
-- **Tests** : Suite de tests Bats
-- **Avantages** : Maintenable, testable, extensible
-
-## 🏗️ Architecture Modulaire
-
-### Pattern Facade
-Le script principal `git-mirror.sh` agit comme une facade, orchestrant les appels aux modules spécialisés.
-
-### Modules Principaux
-
-#### 1. Logging (`lib/logging/logger.sh`)
-- Système de logs colorés
-- Niveaux : DEBUG, INFO, WARN, ERROR, FATAL
-- Support de verbosité multiple (-v, -vv, -vvv)
-- Format : `[LEVEL] timestamp - message`
-
-#### 2. Authentication (`lib/auth/auth.sh`)
-- Support multi-méthodes : Token, SSH, Public
-- Détection automatique de la méthode disponible
-- Variables d'environnement :
-  - `GITHUB_TOKEN`
-  - `GITHUB_SSH_KEY`
-  - `GITHUB_AUTH_METHOD`
-
-#### 3. GitHub API (`lib/api/github_api.sh`)
-- Gestion de la pagination
-- Cache avec TTL configurable
-- Rate limiting
-- Support `/user/repos` (authentifié) et `/users/:username/repos` (public)
-- Filtrage par type : all, public, private
-
-#### 4. Git Operations (`lib/git/git_ops.sh`)
-- Clone avec retry automatique
-- Nettoyage des clones partiels
-- Gestion des submodules
-- Support des filtres Git (blob:none, etc.)
-- Clonage shallow (--depth)
-- Statistiques Git
-
-#### 5. Cache (`lib/cache/cache.sh`)
-- Cache API avec système de fichiers
-- TTL configurable par défaut (1 heure)
-- Invalidation manuelle (--no-cache)
-- Cache pour métadonnées (total_repos)
-
-#### 6. Filters (`lib/filters/filters.sh`)
-- Exclusion par patterns
-- Inclusion par patterns
-- Support de fichiers de patterns
-- Pattern glob (`*`, `?`, `[...]`)
-- Filtrage par type de dépôt (fork/non-fork)
-
-#### 7. Parallel (`lib/parallel/parallel.sh`)
-- Utilisation de GNU parallel
-- Jobs parallèles configurables (--parallel)
-- Agrégation des résultats
-- Gestion des erreurs en parallèle
-- Export des variables d'environnement
-
-#### 8. Metrics (`lib/metrics/metrics.sh`)
-- Collecte de métriques
-- Export JSON, CSV, HTML
-- Statistiques : succès, échecs, temps
-- Rate de réussite
-
-#### 9. Interactive (`lib/interactive/interactive.sh`)
-- Mode interactif avec confirmations
-- Résumé avant exécution
-- Mode automatique (--yes)
-
-#### 10. State (`lib/state/state.sh`)
-- Sauvegarde d'état pour reprise
-- Persistance des dépôts traités
-- Mode --resume
-
-#### 11. Incremental (`lib/incremental/incremental.sh`)
-- Traitement uniquement des dépôts modifiés
-- Basé sur `pushed_at`
-- Cache de dernière synchronisation
-
-#### 12. Profiling (`lib/utils/profiling.sh`)
-- Mesure de performance
-- Détails par fonction
-- Export des stats
-
-#### 13. Validation (`lib/validation/validation.sh`)
-- Validation des entrées utilisateur
-- Vérification des paramètres
-- Helpers de validation
-
-## 🔧 Options Principales
-
-### Filtrage
-- `--repo-type TYPE` : all, public, private
-- `--exclude-forks` : Exclure les forks
-- `--exclude PATTERN` : Exclure par pattern
-- `--include PATTERN` : Inclure par pattern
-
-### Performance
-- `--parallel JOBS` : Jobs parallèles
-- `--incremental` : Seulement les modifiés
-- `--depth N` : Clonage shallow
-- `--filter FILTER` : Filtre Git
-
-### Opérations
-- `--resume` : Reprendre une exécution
-- `--interactive` : Mode interactif
-- `--yes` : Mode automatique
-- `--dry-run` : Simulation
-
-## 🎯 Workflows Principaux
-
-### 1. Workflow Standard
-```
-1. Parse arguments
-2. Load configuration
-3. Authenticate
-4. Fetch repositories from API
-5. Apply filters
-6. Process repositories (clone/pull)
-7. Generate report
-```
-
-### 2. Workflow Parallèle
-```
-1. Parse arguments
-2. Load modules
-3. Authenticate
-4. Fetch repositories
-5. Apply filters
-6. Split into jobs
-7. Execute parallel
-8. Aggregate results
-9. Generate report
-```
-
-### 3. Workflow Incrémental
-```
-1. Parse arguments
-2. Load last sync timestamp
-3. Fetch repositories
-4. Filter by pushed_at > last_sync
-5. Process only modified repos
-6. Update last_sync timestamp
-7. Generate report
-```
-
-## 📊 Métriques Clés
-
-### Statistiques du Code
-| Fichier | Lignes | Description |
-|---------|--------|-------------|
-| `git-mirror.sh` | 928 | Script principal (facade) |
-| `config/config.sh` | 330 | Configuration principale |
-| Total modules `lib/` | 3905 | 13 modules fonctionnels |
-| Fichiers de config `.conf` | 12 | Configuration spécialisée |
-| **Total** | **5163+** | Lignes de code |
-
-### Distribution du Code
-```
-Configuration  : 330 lignes  (~6%)  + 12 fichiers .conf
-Orchestration  : 928 lignes  (~18%)
-Modules        : 3905 lignes (~76%)
-```
-
-### Structure des Tests
-- **Tests unitaires** : 13 fichiers `.bats`
-- **Catégories de tests** : 7 (unit, integration, regression, load, mocks, utils, data)
-- **Framework** : Bats (Bash Automated Testing System)
-
-### Performance
-- **Taux de succès** : 98%+
-- **Performance parallèle** : 5x accélération avec 5 jobs
-- **Cache hit rate** : 90%+ avec TTL 1h
-- **Temps d'exécution** : 15-20 min pour 249 dépôts en parallèle
-
-## 🔑 Points Clés d'Implémentation
-
-### Séparation des Responsabilités
-- **git-mirror.sh** : Orchestration uniquement
-- **lib/** : Logique métier
-- **config/** : Configuration
-- **tests/** : Tests
-
-### Imports de Modules
-```bash
-# Dans git-mirror.sh
-source "${SCRIPT_DIR}/config/config.sh"
-source "${SCRIPT_DIR}/lib/logging/logger.sh"
-source "${SCRIPT_DIR}/lib/auth/auth.sh"
-# ... etc (13 modules au total)
-```
-
-### Variables d'Environnement
-- Chargées depuis `config/config.sh`
-- Surchargées par les arguments CLI
-- Exportées pour les sous-processus
-
-### Chemins Absolus
-- Tous les chemins sont normalisés en absolus
-- Nécessaire pour le mode parallèle
-- Empêche les erreurs "Invalid path"
-
-## 📁 Fichiers de Configuration
-
-Le projet utilise 12 fichiers de configuration spécialisés dans `config/` :
-
-### Configuration Principale
-- **config.sh** : Configuration centralisée (330 lignes)
-  - Variables d'environnement
-  - Chemins et répertoires
-  - Options par défaut
-
-### Configurations Spécialisées
-- **git-mirror.conf** : Configuration par défaut du script
-  - Paramètres généraux (destination, branche, filtre)
-  - Configuration des modules (parallel, metrics, cache)
-  - Gestion des logs et verbose
-
-- **performance.conf** : Optimisation des performances
-  - Paramètres de parallélisation (DEFAULT_JOBS, MAX_JOBS, TIMEOUT)
-  - Configuration du cache (TTL, cleanup intervals)
-  - Gestion mémoire et réseau
-
-- **security.conf** : Configuration de sécurité
-  - Gestion des tokens
-  - Validation des accès
-  - Paramètres d'authentification
-
-- **cicd.conf / ci.conf** : Configuration CI/CD
-  - Plateforme et triggers
-  - Matrices de tests multi-OS
-  - Caching et optimisation
-
-- **deployment.conf** : Déploiement
-  - Environnements cibles
-  - Scripts de déploiement
-  - Rollback strategies
-
-- **testing.conf** : Configuration des tests
-  - Types de tests
-  - Environnements de test
-  - Mocking et fixtures
-
-- **maintenance.conf** : Maintenance
-  - Tâches périodiques
-  - Cleanup automatique
-  - Rapports de santé
-
-- **dependencies.conf** : Gestion des dépendances
-  - Versions requises
-  - Compatibilité
-  - Mises à jour
-
-- **documentation.conf / docs.conf** : Documentation
-  - Génération de docs
-  - Formats de sortie
-  - Templates
-
-## 🎨 Design Patterns Appliqués
-
-### 1. Pattern Facade
-**Implémentation** : `git-mirror.sh` agit comme une façade
-- **Rôle** : Interface unique simplifiée vers 13 modules complexes
-- **Avantage** : Cachage de la complexité interne
-- **Usage** : Orchestration des appels aux modules
-
-### 2. Pattern Command
-**Implémentation** : Arguments CLI → Actions
-- **Role** : Encapsulation des commandes comme objets
-- **Avantage** : Flexibilité et extensibilité
-- **Usage** : `--parallel`, `--incremental`, `--resume`
-
-### 3. Pattern Strategy
-**Implémentation** : Authentification multi-méthodes
-- **Role** : Interchangeabilité des algorithmes
-- **Méthodes** : Token, SSH, Public
-- **Avantage** : Extensible pour nouvelles méthodes
-
-### 4. Pattern Observer
-**Implémentation** : Système de logging/métriques
-- **Role** : Notification des changements d'état
-- **Observers** : Logger, Métriques, Profiling
-- **Avantage** : Découplage des notifications
-
-### 5. Pattern Template Method
-**Implémentation** : Workflows standardisés
-- **Workflows** : Standard, Parallèle, Incrémental
-- **Avantage** : Réutilisation de logique commune
-- **Extensibilité** : Nouveaux workflows faciles à ajouter
-
-### 6. Pattern Singleton
-**Implémentation** : Configuration globale
-- **Instance unique** : Chargement une seule fois
-- **Variables globales** : `SCRIPT_DIR`, `LIB_DIR`, `CONFIG_DIR`
-- **Avantage** : Cohérence de configuration
-
-## 🎯 Bonnes Pratiques
-
-### Nommage
-- Modules : `MODULE_NAME.sh`
-- Fonctions : `module_function_name()`
-- Variables locales : `local_var`
-- Variables globales : `GLOBAL_VAR`
-
-### Tests
-- 7 catégories de tests organisées dans `tests/`
-- 13 fichiers `.bats` pour tests unitaires
-- Utilisation de Bats framework
-- Tests d'intégration, régression et charge
-
-## 🔐 Sécurité
-
-- Gestion sécurisée des tokens
-- Pas de logs de secrets
-- Détection automatique des fuites
-- Validation des chemins
-
-## 🧪 Tests
-
-- Tests unitaires Bats
-- Tests d'intégration
-- Tests de charge
-- Validation ShellCheck
-
-## 🔍 Guide de Debugging pour Développeurs
-
-### Mode Débogage
-```bash
-# Activer le mode verbeux maximum
-./git-mirror.sh -vvv users ZarTek-Creole
-
-# Activer le profiling
-./git-mirror.sh --profile users ZarTek-Creole
-```
-
-### Variables d'Environnement de Debug
-```bash
-export DEBUG=true
-export VERBOSE=3
-export LOG_LEVEL=DEBUG
-```
-
-### Points d'Inspection
-1. **Logger** : Vérifier les logs avec `-vvv`
-2. **Cache** : Vérifier `$CACHE_DIR/api/`
-3. **État** : Vérifier `$STATE_FILE` ou `$STATE_DIR/`
-4. **Métriques** : Exporter avec `--metrics debug.json`
-
-### Problèmes Courants
-
-#### Erreur "Module not found"
-```bash
-# Vérifier que tous les modules sont chargés
-source lib/logging/logger.sh
-```
-
-#### Erreur "Invalid path" en mode parallèle
-```bash
-# Vérifier normalisation des chemins
-ls -la $SCRIPT_DIR
-```
-
-#### Problème de cache
-```bash
-# Désactiver le cache temporairement
-./git-mirror.sh --no-cache users ZarTek-Creole
-
-# Nettoyer le cache
-rm -rf .git-mirror-cache
-```
-
-## 📈 Évolutions Futures
-
-- Support GitLab
-- Support Bitbucket
-- Mode daemon (surveillance continue)
-- Interface web
-- Notifications
+# Architecture du Projet Git-Mirror
+
+**Version**: 2.5.0  
+**Date**: 2025-01-28  
+**Pattern**: Facade + Command + Observer + Module
 
 ---
 
-**Note** : Cette architecture modulaire facilite la maintenance, les tests et l'extension du projet. Chaque module peut être développé, testé et débogué indépendamment.
+## Table des Matières
+
+- [Vue d'Ensemble](#vue-densemble)
+- [Architecture Modulaire](#architecture-modulaire)
+- [Design Patterns](#design-patterns)
+- [Modules Détail](#modules-détail)
+- [Flux d'Exécution](#flux-dexécution)
+- [Configuration](#configuration)
+- [Gestion des Erreurs](#gestion-des-erreurs)
+- [Tests et Validation](#tests-et-validation)
+- [Roadmap Technique](#roadmap-technique)
+
+---
+
+## Vue d'Ensemble
+
+Git-Mirror est un script Bash avancé pour le clonage et la synchronisation de dépôts GitHub. Il utilise une **architecture modulaire** avec 13 modules spécialisés orchestrés par un script principal.
+
+### Philosophie de Conception
+
+- **Modularité**: Chaque module gère un domaine fonctionnel spécifique
+- **Séparation des Préoccupations**: Responsabilité unique par module
+- **Configuration Externalisée**: Personnalisation sans modification du code
+- **Gestion d'Erreurs Robuste**: Trapping, validation, logging
+- **Testabilité**: Modules isolés et testables individuellement
+
+---
+
+## Architecture Modulaire
+
+### Vue d'Ensemble de la Structure
+
+```
+git-mirror/
+├── git-mirror.sh          # ⭐ FACADE - Orchestration
+├── config/                # ⚙️ Configuration externalisée
+│   ├── config.sh          # Config principale (330 lignes)
+│   └── *.conf             # 12 fichiers de config spécialisés
+├── lib/                   # 📦 13 Modules fonctionnels
+│   ├── api/              # API GitHub (480 lignes)
+│   ├── auth/             # Authentification (365 lignes)
+│   ├── cache/            # Cache API (332 lignes)
+│   ├── filters/          # Filtrage (358 lignes)
+│   ├── git/              # Opérations Git (453 lignes)
+│   ├── incremental/      # Mode incrémental (204 lignes)
+│   ├── interactive/      # Interface interactive (335 lignes)
+│   ├── logging/          # Système de logs (206 lignes)
+│   ├── metrics/          # Métriques (275 lignes)
+│   ├── parallel/         # Parallélisation (229 lignes)
+│   ├──一致的/logging.sh   - 206 lignes
+│   ├── state/            # Gestion d'état (267 lignes)
+│   ├── utils/            # Utilitaires (100 lignes)
+│   └── validation/       # Validation (369 lignes)
+└── tests/                # 🧪 Infrastructure de tests
+    ├── spec/             # Tests ShellSpec (BDD)
+    ├── integration/      # Tests d'intégration
+    ├── regression/       # Tests de régression
+    ├── load/            # Tests de charge
+    └── mocks/           # Données mockées
+```
+
+---
+
+## Design Patterns
+
+### 1. Facade Pattern
+
+**Implémentation**: `git-mirror.sh`
+
+Le script principal agit comme une **façade** qui orchestre les modules sans exposer leur complexité interne.
+
+```bash
+# Chargement de tous les modules
+source "$LIB_DIR/logging/logger.sh"
+source "$CONFIG_DIR/config.sh"
+source "$LIB_DIR/auth/auth.sh"
+# ... (13 modules au total)
+
+# Orchestration dans main()
+init_logger ...
+init_config ...
+auth_setup ...
+api_setup ...
+validate_setup ...
+# ... (initialisation séquentielle)
+```
+
+**Avantages**:
+- Interface unique et simple
+- Découplage des modules
+- Maintenance facilitée
+
+---
+
+### 2. Command Pattern
+
+**Implémentation**: Fonctions `*_setup()` de chaque module
+
+Chaque module expose une fonction d'initialisation standardisée :
+
+```bash
+# Pattern standard pour chaque module
+module_name_setup() {
+    local result=0
+    # Validation
+    # Initialisation
+    # Configuration
+    return $result
+}
+```
+
+**Exemples**:
+- `auth_setup()` - Initialise l'authentification
+- `api_setup()` - Initialise l'API GitHub
+- `validate_setup()` - Initialise la validation
+- `git_ops_setup()` - Initialise les opérations Git
+- `cache_setup()` - Initialise le cache
+- `parallel_setup()` - Initialise la parallélisation
+- `filters_setup()` - Initialise le filtrage
+- `metrics_setup()` - Initialise les métriques
+- `interactive_setup()` - Initialise l'interface interactive
+- `state_setup()` - Initialise la gestion d'état
+- `incremental_setup()` - Initialise le mode incrémental
+
+---
+
+### 3. Module Pattern
+
+**Implémentation**: Organisation en dossiers `lib/`
+
+Chaque module est **auto-contenu** dans son propre dossier :
+
+```
+lib/api/
+├── github_api.sh         # Code du module
+└── (fonctions exportées)  # Interface publique
+```
+
+**Caractéristiques**:
+- Un fichier par module
+- Fonctions préfixées par le nom du module
+- Interface publique définie
+- Documentation interne
+
+---
+
+### 4. Observer Pattern
+
+**Implémentation**: Système de logging et métriques
+
+Les modules écrivent leurs événements via le système de logging, observé et agrégé :
+
+```bash
+# Dans les modules
+log_info "Traitement démarré"
+log_error "Échec détecté"
+log_debug "Détail technique"
+
+# Agrégation dans le script principal
+export_metrics "$METRICS_FILE" "json"
+```
+
+---
+
+## Modules Détail
+
+### 1. 🪵 Module Logging (`lib/logging/logger.sh`)
+
+**Responsabilité**: Gestion unifiée des logs
+
+**Fonctions Principales**:
+- `init_logger(verbose, quiet, dry_run)` - Initialisation
+- `log_info(message)` - Log d'information
+- `log_error(message)` - Log d'erreur
+- `log_warning(message)` - Log d'avertissement
+- `log_debug(message)` - Log de debug
+- `log_success(message)` - Log de succès
+- `log_dry_run(message)` - Log mode simulation
+
+**Niveaux de Verbosité**:
+- `QUIET`: Aucun output (erreurs fatales uniquement)
+- `NORMAL`: Informations essentielles
+- `VERBOSE (-v)`: Détails supplémentaires
+- `DEBUG (-vv)`: Mode debug détaillé
+- `TRACE (-vvv)`: Trace complète
+
+---
+
+### 2. 🔐 Module Auth (`lib/auth/auth.sh`)
+
+**Responsabilité**: Authentification multi-méthodes
+
+**Méthodes Supportées**:
+1. **Token GitHub**: Variable `GITHUB_TOKEN`
+2. **Clé SSH**: Variable `GITHUB_SSH_KEY`
+3. **Authentification Publique**: Par défaut
+
+**Fonctions Principales**:
+- `auth_setup()` - Initialise l'authentification
+- `get_auth_header()` - Retourne le header d'auth
+- `detect_auth_method()` - Détecte la méthode disponible
+- `validate_token()` - Valide le token
+- `validate_ssh_key()` - Valide la clé SSH
+
+**Variables d'Environnement**:
+```bash
+GITHUB_TOKEN="ghp_xxxxx"           # Token GitHub
+GITHUB_SSH_KEY="/path/to/id_rsa"  # Clé SSH
+GITHUB_AUTH_METHOD="token|ssh|public"  # Forcer méthode
+```
+
+---
+
+### 3. 🌐 Module API (`lib/api/github_api.sh`)
+
+**Responsabilité**: Interactions avec l'API GitHub
+
+**Fonctionnalités**:
+- Gestion des rate limits
+- Pagination automatique
+- Cache des requêtes
+- Gestion des erreurs HTTP
+
+**Fonctions Principales**:
+- `api_setup()` - Initialise l'API
+- `fetch_repos(context, username)` - Récupère la liste des repos
+- `get_repo_count(context, username)` - Compte les repos
+- `api_get_stats()` - Statistiques API
+- `handle_rate_limit()` - Gestion des limites
+
+**Endpoints Utilisés**:
+- `GET /users/{username}/repos` - Repos d'un utilisateur
+- `GET /orgs/{org}/repos` - Repos d'une organisation
+- `GET /user` - Informations utilisateur authentifié
+- `GET /rate_limit` - Limites de rate
+
+---
+
+### 4. ✅ Module Validation (`lib/validation/validation.sh`)
+
+**Responsabilité**: Validation des paramètres et prérequis
+
+**Fonctions Principales**:
+- `validate_setup()` - Initialise la validation
+- `validate_all_params(...)` - Valide tous les paramètres
+- `validate_context(context)` - Valide le contexte (users/orgs)
+- `validate_username(name)` - Valide un nom d'utilisateur
+- `validate_directory(path)` - Valide un chemin
+- `check_dependencies()` - Vérifie les dépendances
+
+**Validations**:
+- ✅ Contexte doit être `users` ou `orgs`
+- ✅ Username conforme aux patterns GitHub
+- ✅ Répertoire accessible en écriture
+- ✅ Dépendances installées (git, jq, curl)
+- ✅ Version minimale des dépendances
+
+---
+
+### 5. 🔧 Module Git Ops (`lib/git/git_ops.sh`)
+
+**Responsabilité**: Opérations Git (clone, pull, etc.)
+
+**Fonctions Principales**:
+- `git_ops_setup()` - Initialise Git
+- `clone_repo(url, dest, options)` - Clone un dépôt
+- `update_repo(path)` - Met à jour un dépôt existant
+- `repository_exists(path)` - Vérifie l'existence
+- `get_current_branch(path)` - Récupère la branche actuelle
+- `get_git_stats()` - Statistiques Git
+
+**Options Supportées**:
+- `--filter blob:none` - Clone partiel
+- `--no-checkout` - Sans checkout
+- `--single-branch` - Une seule branche
+- `--depth N` - Clone shallow
+- `--timeout SECONDS` - Timeout
+
+---
+
+### 6. 💾 Module Cache (`lib/cache/cache.sh`)
+
+**Responsabilité**: Cache des réponses API
+
+**Fonctionnalités**:
+- Cache sur disque (JSON)
+- Expiration configurable
+- Invalidation sur demande
+- Statistiques du cache
+
+**Fonctions Principales**:
+- `cache_setup()` - Initialise le cache
+- `cache_get(key)` - Récupère du cache
+- `cache_set(key, value, ttl)` - Stocke dans le cache
+- `cache_invalidate(key)` - Invalide le cache
+- `get_cache_stats()` d'utilisation
+
+**Répertoire de Cache**:
+```
+.git-mirror-cache/
+├── api-responses/        # Réponses API
+├── repo-lists/          # Listes de dépôts
+└── metadata/            # Métadonnées
+```
+
+---
+
+### 7. 🔀 Module Parallel (`lib/parallel/parallel.sh`)
+
+**Responsabilité**: Parallélisation avec GNU parallel
+
+**Fonctionnalités**:
+- Traitement parallèle des repos
+- Contrôle du nombre de jobs
+- Gestion des jobs interrompus
+- Statistiques de performance
+
+**Fonctions Principales**:
+- `parallel_setup()` - Initialise la parallélisation
+- `process_parallel(repos, jobs)` - Traite en parallèle
+- `run_in_parallel(command)` - Exécute une commande en parallèle
+- `parallel_cleanup()` - Nettoyage
+- `get_parallel_stats()` - Statistiques
+
+**Dépendance**: GNU parallel (optionnel)
+
+---
+
+### 8. 🎯 Module Filters (`lib/filters/filters.sh`)
+
+**Responsabilité**: Filtrage des dépôts
+
+**Types de Filtres**:
+1. **Exclusion par Pattern**: `--exclude "test-*"`
+2. **Inclusion par Pattern**: `--include "project-*"`
+3. **Exclusion de Forks**: `--exclude-forks`
+4. **Filtrage par Type**: `--repo-type public|private|all`
+5. **Fichiers de Patterns**: `--exclude-file patterns.txt`
+
+**Fonctions Principales**:
+- `filters_setup()` - Initialise le filtrage
+- `should_exclude_repo(repo_name)` - Teste l'exclusion
+- `should_include_repo(repo_name)` - Teste l'inclusion
+- `filter_repos(repos)` - Filtre la liste
+- `get_filter_stats()` - Statistiques
+
+---
+
+### 9. 📊 Module Metrics (`lib/metrics/metrics.sh`)
+
+**Responsabilité**: Collecte et export des métriques
+
+**Métriques Collectées**:
+- Nombre de repos clonés/mis à jour/échoués
+- Temps d'exécution
+- Taille des dépôts
+- Statistiques de succès/échec
+
+**Fonctions Principales**:
+- `metrics_setup()` - Initialise les métriques
+- `metrics_record_repo(name, action, time)` - Enregistre
+- `metrics_calculate()` - Calcule les agrégats
+- `export_metrics(file, format)` - Exporte les métriques
+
+**Formats d'Export**:
+- JSON
+- CSV
+- HTML
+
+---
+
+### 10. 💬 Module Interactive (`lib/interactive/interactive.sh`)
+
+**Responsabilité**: Interface utilisateur interactive
+
+**Fonctionnalités**:
+- Confirmations interactives
+- Affichage de résumé
+- Gestion des interruptions
+- Messages de progression
+
+**Fonctions Principales**:
+- `interactive_setup()` - Initialise l'interface
+- `confirm_action(message)` - Demande confirmation
+ elegant messages(message)` - Affiche des messages
+- `get_interactive_stats()` - Statistiques
+
+**Modes**:
+- `--interactive` - Mode interactif
+- `--confirm` - Afficher résumé + confirmation
+- `--yes` - Mode automatique (sans confirmation)
+
+---
+
+### 11. 📁 Module State (`lib/state/state.sh`)
+
+**Responsabilité**: Gestion de l'état d'exécution
+
+**Fonctionnalités**:
+- Sauvegarde de l'état
+- Reprise d'exécution (`--resume`)
+- Tracking de progression
+- Protection contre les interruptions
+
+**Fonctions Principales**:
+- `state_setup()` - Initialise la gestion d'état
+- `save_state(data)` - Sauvegarde l'état
+- `restore_state()` - Restaure l'état
+- `clear_state()` - Nettoie l'état
+- `get_state()` - Récupère l'état
+
+**Fichier d'État**:
+```
+.git-mirror-state.json
+{
+  "last_repo": "...",
+  "completed": [...],
+  "failed": [...],
+  "timestamp": "..."
+}
+```
+
+---
+
+### 12. 📈 Module Incremental (`lib/incremental/incremental.sh`)
+
+**Responsabilité**: Mode incrémental (seulement repos modifiés)
+
+**Fonctionnalités**:
+- Comparaison de timestamps
+- Cache des derniers états
+- Détection de modifications
+- Optimisation du temps d'exécution
+
+**Fonctions Principales**:
+- `incremental_setup()` - Initialise le mode incrémental
+- `is_repo_modified(repo, timestamp)` - Vérifie si modifié
+- `get_last_sync_timestamp()` - Récupère le dernier sync
+- `update_sync_timestamp()` - Met à jour le timestamp
+
+**Option**: `--incremental`
+
+---
+
+### 13. 🛠️ Module Utils (`lib/utils/profiling.sh`)
+
+**Responsabilité**: Profiling et utilitaires
+
+**Fonctionnalités**:
+- Mesure du temps d'exécution
+- Profiling des fonctions
+- Statistiques de performance
+- Rapport de profiling
+
+**Fonctions Principales**:
+- `profiling_enable()` - Active le profiling
+- `profiling_start(function)` - Démarre le profiling
+- `profiling_stop(function)` - Arrête le profiling
+- `profiling_summary()` - Affiche le résumé
+
+**Option**: `--profile`
+
+---
+
+## Flux d'Exécution
+
+### Séquence d'Initialisation
+
+```mermaid
+graph TD
+    A[git-mirror.sh] --> B[Charger tous les modules]
+    B --> C[init_logger]
+    C --> D[init_config]
+    D --> E[auth_setup]
+    E --> F[api_setup]
+    F --> G[validate_setup]
+    G --> H[git_ops_setup]
+    H --> I[cache_setup]
+    I --> J[parallel_setup]
+    J --> K[filters_setup]
+    K --> L[metrics_setup]
+    L --> M[interactive_setup]
+    M --> N[state_setup]
+    N --> O[incremental_setup]
+    O --> P[check_dependencies]
+    P --> Q[Traiter les repos]
+```
+
+### Flux de Traitement d'un Repo
+
+```
+1. Récupérer la liste des repos via API
+2. Appliquer les filtres (exclude/include)
+3. Mode incrémental : Vérifier si modifié
+4. Mode parallèle : Distribuer les jobs
+5. Pour chaque repo :
+   a. Vérifier si existe déjà
+   b. Clone (si nouveau) ou Pull (si existant)
+   c. Enregistrer les métriques
+   d. Gérer les erreurs
+6. Exporter les métriques finales
+7. Afficher le résumé
+```
+
+---
+
+## Configuration
+
+### Structure de Configuration
+
+```
+config/
+├── config.sh              # Config principale (logique)
+├── git-mirror.conf        # Config par défaut
+├── performance.conf       # Performances
+├── security.conf          # Sécurité
+├── cicd.conf             # CI/CD
+├── ci.conf               # Intégration continue
+├── deployment.conf       # Déploiement
+├── testing.conf          # Tests
+├── maintenance.conf      # Maintenance
+├── dependencies.conf     # Dépendances
+└── documentation.conf    # Documentation
+```
+
+### Chargement de la Configuration
+
+1. **config.sh** - Chargé en premier, définit les variables
+2. **Fichiers .conf** - Chargés selon le contexte
+3. **Arguments CLI** - Override la configuration
+4. **Variables d'environnement** - Override finale
+
+---
+
+## Gestion des Erreurs
+
+### Stratégie de Gestion
+
+1. **Sécurité Bash**: `set -euo pipefail`
+2. **Trapping des Signaux**: SIGINT, SIGTERM
+3. **Validation Proactive**: Vérifier avant d'agir
+4. **Logging Complet**: Tous les événements logués
+5. **Mode Dry-Run**: Simulation sans effet
+
+### Niveaux d'Erreur
+
+- **INFO**: Informations normales
+- **WARNING**: Avertissement (continue)
+- **ERROR**: Erreur récupérable
+- **FATAL**: Erreur fatale (arrêt)
+
+---
+
+## Tests et Validation
+
+### Infrastructure de Tests
+
+```
+tests/
+├── spec/                  # Tests ShellSpec (BDD)
+│   ├── unit/             # Tests unitaires par module
+│   └── integration/      # Tests d-de-end
+├── integration/          # Tests d'intégration
+├── regression/           # Tests de régression
+├── load/                # Tests de charge
+└── mocks/               # Données mockées
+```
+
+### Couverture par Module
+
+| Module | Tests | Status |
+|--------|-------|--------|
+| logging | ✅ | Complet |
+| auth | ✅ | Complet |
+| validation | ✅ | Complet |
+| api | ✅ | Critique |
+| git_ops | ✅ | Complet |
+| cache | ✅ | Complet |
+| filters | ✅ | Complet |
+| metrics | ✅ | Complet |
+| parallel | ✅ | Complet |
+| state | ✅ | Complet |
+| incremental | ✅ | Complet |
+| interactive | ⚠️ | Partiel |
+| profiling | ⚠️ | Partiel |
+
+---
+
+## Roadmap Technique
+
+### Améliorations Futures
+
+1. **Tests Manquants**:
+   - [ ] Tests pour `interactive.sh`
+   - [ ] Tests pour `profiling.sh`
+
+2. **Coverage**:
+   - [ ] Activer kcov pour métriques précises
+   - [ ] Objectif: 90%+ coverage
+
+3. **Performance**:
+   - [ ] Benchmarking détaillé
+   - [ ] Optimisation des appels API
+
+4. **Documentation**:
+   - [x] ARCHITECTURE.md (créé)
+   - [ ] Guide de développement
+   - [ ] Contribution guidelines avancées
+
+---
+
+**Document créé**: 2025-01-28  
+**Auteur**: Architecture Team  
+**Version**: 1.0.0
+
