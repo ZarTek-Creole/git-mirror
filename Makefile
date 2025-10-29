@@ -247,3 +247,13 @@ act-workflow:
 	fi
 	@./scripts/test-workflows-local.sh --workflow $(WORKFLOW)
 
+
+# Validation complète du projet
+.PHONY: validate check
+validate: check
+	@./scripts/validate-project.sh
+
+check:
+	@echo "Validation rapide..."
+	@bash -n git-mirror.sh
+	@echo "✅ Syntaxe OK"

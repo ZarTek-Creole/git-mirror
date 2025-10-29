@@ -1,0 +1,5 @@
+# ShellCheck configuration for git-mirror
+# Ignore SC1091 for dynamic sources (normal in modular Bash)
+disable=SC1091
+# Ignore SC2034 for exported variables used in sourced files
+# disable=SC2034
