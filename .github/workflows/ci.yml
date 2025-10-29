@@ -47,9 +47,9 @@ jobs:
 
     steps:
       - name: Checkout code
-      uses: actions/checkout@v4
+        uses: actions/checkout@v4
 
-    - name: Setup Bash environment
+      - name: Setup Bash environment
       uses: ./.github/actions/setup-bash-environment
       with:
         install_shellcheck: true
