@@ -16,22 +16,51 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - name: Cache ShellSpec
+      id: cache-shellspec
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.local/share/shellspec
+          bin
+        key: ${{ runner.os }}-shellspec-0.28.1
+        restore-keys: |
+          ${{ runner.os }}-shellspec-
+
     - name: Setup shellspec
       run: |
-        curl -fsSL https://git.io/shellspec | sh -s -- --yes
+        if [ ! -f bin/shellspec ]; then
+          curl -fsSL https://git.io/shellspec | sh -s -- --yes
+        else
+          echo "✅ ShellSpec already installed (cached)"
+        fi
         echo "$PWD/bin" >> $GITHUB_PATH
 
+    - name: Cache kcov
+      id: cache-kcov
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/kcov
+          /usr/local/bin/kcov
+        key: ${{ runner.os }}-kcov-v38
+        restore-keys: |
+          ${{ runner.os }}-kcov-
+
     - name: Install kcov
+      if: steps.cache-kcov.outputs.cache-hit != 'true'
       run: |
+        echo "Building kcov..."
         sudo apt-get update
         sudo apt-get install -y libcurl4-openssl-dev libelf-dev libdw-dev cmake gcc binutils-dev
-        wget https://github.com/SimonKagstrom/kcov/archive/v38.tar.gz
+        wget -q https://github.com/SimonKagstrom/kcov/archive/v38.tar.gz
         tar xzf v38.tar.gz
         cd kcov-38
         mkdir build && cd build
         cmake ..
-        make
+        make -j$(nproc)
         sudo make install
+        echo "✅ kcov v38 installed"
 
     - name: Run tests with coverage
       run: |
@@ -44,8 +73,9 @@ jobs:
         ls -lh coverage/
 
     - name: Upload coverage
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v4
       with:
         files: ./coverage/report.json
         fail_ci_if_error: false
+        token: ${{ secrets.CODECOV_TOKEN }}
 

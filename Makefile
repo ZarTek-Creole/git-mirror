@@ -15,7 +15,7 @@ YELLOW := \033[0;33m
 BLUE := \033[0;34m
 NC := \033[0m # No Color
 
-.PHONY: all install uninstall test clean docs help
+.PHONY: all install uninstall test clean docs help act-test act-list act-quick act-workflow
 
 # Cible par défaut
 all: test
@@ -212,6 +212,10 @@ help:
 	@echo "  make docs         - Générer la documentation"
 	@echo "  make package      - Créer un package de distribution"
 	@echo "  make install-deps - Installer les dépendances"
+	@echo "  make act-test     - Tester workflows GitHub Actions (actvement)"
+	@echo "  make act-list     - Lister tous les workflows"
+	@echo "  make act-quick    - Test rapide (ShellCheck)"
+	@echo "  make act-workflow - Test un workflow (õORKFLOW=nom)"
 	@echo "  make help         - Afficher cette aide"
 	@echo ""
 	@echo "$(GREEN)Variables:$(NC)"
@@ -220,3 +224,26 @@ help:
 	@echo "  MANDIR=$(MANDIR)"
 	@echo "  CONFDIR=$(CONFDIR)"
 	@echo "  VERSION=$(VERSION)"
+# Act - GitHub Actions Testing
+
+# Targets pour Act (GitHub Actions testing)
+act-test:
+	@echo "Test des workflows GitHub Actions localement..."
+	@./scripts/test-workflows-local.sh --quick
+
+act-list:
+	@echo "Liste des workflows disponibles:"
+	@./scripts/test-workflows-local.sh --list
+
+act-quick:
+	@echo "Test rapide: ShellCheck workflow..."
+	@./scripts/test-workflows-local.sh --quick
+
+act-workflow:
+	@echo "Usage: make act-workflow WORKFLOW=shellcheck"
+	@if [ -z "$(WORKFLOW)" ]; then \
+		echo "Spécifiez WORKFLOW=nom_du_workflow"; \
+		exit 1; \
+	fi
+	@./scripts/test-workflows-local.sh --workflow $(WORKFLOW)
+

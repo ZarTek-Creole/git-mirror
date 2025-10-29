@@ -296,30 +296,31 @@ api_fetch_all_repos() {
     actual_repo_type="${REPO_TYPE:-all}"
     
     # Décider quelle URL utiliser et quel paramètre type passer
-    if [ "$context" = "users" ] && [ -n "${GITHUB_AUTH_METHOD:-}" ] && \
-       [ "$GITHUB_AUTH_METHOD" != "public" ]; then
-        # Mode authentifié : utiliser /user/repos avec le paramètre type
-        api_url="$API_BASE_URL/user/repos"
-        repo_type_param="$actual_repo_type"
-        log_debug "Mode authentifié: récupération type '$actual_repo_type'" >&2
+    # Toujours utiliser /users/:username/repos pour récupérer les dépôts d'un utilisateur spécifique
+    # L'authentification permet d'accéder aux dépôts privés si l'utilisateur authentifié y a accès
+    api_url="$API_BASE_URL/$context/$username/repos"
+    
+    if [ "$actual_repo_type" != "public" ] && [ "$actual_repo_type" != "all" ] && \
+       [ -z "${GITHUB_AUTH_METHOD:-}" ]; then
+        log_warning "Les dépôts privés nécessitent authentification" >&2
+        log_warning "Utilisation des dépôts publics seulement" >&2
+    fi
+    
+    repo_type_param="$actual_repo_type"
+    
+    if [ -n "${GITHUB_AUTH_METHOD:-}" ] && [ "$GITHUB_AUTH_METHOD" != "public" ]; then
+        log_debug "Mode authentifié: récupération type '$actual_repo_type' de $username" >&2
     else
-        # Mode public : utiliser /users/:username/repos (seulement publics disponibles)
-        if [ "$actual_repo_type" != "public" ] && [ "$actual_repo_type" != "all" ]; then
-            log_warning "Les dépôts privés nécessitent authentification" >&2
-            log_warning "Utilisation des dépôts publics seulement" >&2
-        fi
-        api_url="$API_BASE_URL/$context/$username/repos"
-        repo_type_param="all"  # Pour compatibilité
-        log_debug "Mode public: récupération dépôts publics seulement" >&2
+        log_debug "Mode public: récupération dépôts publics de $username" >&2
     fi
     
     while true; do
-        local url="${api_url}?page=${page}&per_page=${per_page}&sort=updated" \
-              "&direction=desc&type=${repo_type_param}"
+        local url="${api_url}?page=${page}&per_page=${per_page}&sort=updated&direction=desc&type=${repo_type_param}"
         
+        log_debug "URL appelée: $url" >&2
         log_debug "Récupération page $page..." >&2
         
-        local response
+        local response 
         if ! response=$(api_fetch_with_cache "$url"); then
             log_error "Échec de la récupération de la page $page" >&2
             # Si nous avons des dépôts partiels, les retourner

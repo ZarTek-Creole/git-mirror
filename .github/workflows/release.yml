@@ -5,20 +5,41 @@ on:
     tags:
       - 'v*.*.*'
 
+permissions:
+  contents: write
+  pull-requests: read
+  checks: read
+  actions: read
+
 jobs:
   release:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     
     steps:
-    - uses: actions/checkout@v3
+    - name: Checkout code
+      uses: actions/checkout@v4
     
-    - name: Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y jq parallel git curl bash
-        npm install -g bats
+    - name: Cache dependencies
+      id: cache-deps
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.npm-global
+          /usr/local/bin/bats
+        key: ${{ runner.os }}-release-deps
+        restore-keys: |
+          ${{ runner.os }}-release-deps-
+    
+    - name: Setup Bash environment
+      uses: ./.github/actions/setup-bash-environment
+      with:
+        install_shellcheck: true
+        install_bats: true
+        install_parallel: true
     
     - name: Run tests
+      timeout-minutes: 10
       run: |
         shellcheck git-mirror.sh lib/*/*.sh config/*.sh
         bats tests/unit/
@@ -33,39 +54,41 @@ jobs:
           --exclude='.git-mirror-state*' \
           --exclude='dist' \
           --exclude='test-results' \
+          --exclude='node_modules' \
           .
+        ls -lh dist/
     
-    - name: Create release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: ${{ github.ref }}
-        release_name: Release ${{ github.ref }}
-        body: |
-          ## Changes in this Release
+    - name: Read CHANGELOG
+      id: changelog
+      run: |
+        if [ -f CHANGELOG.md ]; then
+          # Extract the section for this version
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "Looking for version $VERSION in CHANGELOG.md"
           
-          - Improved authentication handling
-          - Added parallel processing support
-          - Enhanced error handling and logging
-          - Added comprehensive test suite
-          - Improved documentation and installation
+          # Try to extract the changelog for this version
+          awk "/^## \[${VERSION}\]/,/^## \[/" CHANGELOG.md | head -n -1 > /tmp/release-notes.md
+          
+          if [ -s /tmp/release-notes.md ]; then
+            cat /tmp/release-notes.md
+          else
+            # Fallback to default release notes
+            echo "## Changes in this Release
+          
+          - Please see [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/${GITHUB_REF_NAME}/CHANGELOG.md) for details.
           
           ## Installation
           
-          ```bash
-          # Download and extract
-          wget https://github.com/${{ github.repository }}/releases/download/${{ github.ref }}/git-mirror-${{ github.ref_name }}.tar.gz
-          tar -xzf git-mirror-${{ github.ref_name }}.tar.gz
-          cd git-mirror-${{ github.ref_name }}
-          
-          # Install
+          \`\`\`bash
+          wget https://github.com/${{ github.repository }}/releases/download/${GITHUB_REF_NAME}/git-mirror-${GITHUB_REF_NAME}.tar.gz
+          tar -xzf git-mirror-${GITHUB_REF_NAME}.tar.gz
+          cd git-mirror-${GITHUB_REF_NAME}
           ./install.sh --deps --test
-          ```
+          \`\`\`
           
           ## Usage
           
-          ```bash
+          \`\`\`bash
           # Basic usage
           git-mirror users microsoft
           
@@ -74,16 +97,20 @@ jobs:
           
           # Dry run mode
           git-mirror users microsoft --dry-run
-          ```
+          \`\`\`" > /tmp/release-notes.md
+            cat /tmp/release-notes.md
+          fi
+        else
+          echo "CHANGELOG.md not found"
+        fi
+    
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ github.ref_name }}
+        name: Release ${{ github.ref_name }}
+        body_path: /tmp/release-notes.md
+        files: dist/git-mirror-${GITHUB_REF_NAME}.tar.gz
         draft: false
         prerelease: false
-    
-    - name: Upload package
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: dist/git-mirror-${GITHUB_REF_NAME}.tar.gz
-        asset_name: git-mirror-${GITHUB_REF_NAME}.tar.gz
-        asset_content_type: application/gzip
+        generate_release_notes: true

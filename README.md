@@ -102,22 +102,26 @@ chmod +x git-mirror.sh
 ### Options principales
 
 #### Général
+
 - `-d, --destination DIR` : Répertoire de destination (défaut: ./repositories)
 - `-b, --branch BRANCH` : Branche spécifique à cloner (défaut: branche par défaut)
 - `-h, --help` : Afficher l'aide
 
 #### Options Git
+
 - `-f, --filter FILTER` : Filtre Git pour le clonage partiel (ex: blob:none)
 - `-n, --no-checkout` : Cloner sans checkout initial
 - `-s, --single-branch` : Cloner une seule branche
 - `--depth DEPTH` : Profondeur du clonage shallow (défaut: 1)
 
 #### Performance
+
 - `--parallel JOBS` : Nombre de jobs parallèles (défaut: 1, nécessite GNU parallel)
 - `--timeout SECONDS` : Timeout pour les opérations Git (défaut: 30)
 - `--profile` : Activer le profiling de performance
 
 #### Filtrage
+
 - `--exclude PATTERN` : Exclure les repos correspondant au pattern (peut être utilisé plusieurs fois)
 - `--exclude-file FILE` : Lire les patterns d'exclusion depuis un fichier
 - `--include PATTERN` : Inclure uniquement les repos correspondant au pattern (peut être utilisé plusieurs fois)
@@ -126,6 +130,7 @@ chmod +x git-mirror.sh
 - `--repo-type TYPE` : Type de dépôts à récupérer : `all`, `public`, `private` (défaut: all)
 
 #### Mode
+
 - `--resume` : Reprendre une exécution interrompue
 - `--incremental` : Mode incrémental (traite seulement les repos modifiés)
 - `--interactive` : Mode interactif avec confirmations
@@ -134,11 +139,13 @@ chmod +x git-mirror.sh
 - `--dry-run` : Simulation sans actions réelles
 
 #### Sortie
+
 - `-v, --verbose` : Mode verbeux (peut être utilisé plusieurs fois: -vv, -vvv)
 - `-q, --quiet` : Mode silencieux (sortie minimale)
 - `--metrics FILE` : Exporter les métriques vers un fichier (formats: json,csv,html)
 
 #### Avancé
+
 - `--skip-count` : Éviter le calcul du nombre total de dépôts (utile si limite API)
 - `--no-cache` : Désactiver l'utilisation du cache API (forcer les appels API)
 
@@ -489,11 +496,13 @@ chown -R $USER:$USER ./repositories
 ### Erreur "Repository not found"
 
 **Causes possibles** :
+
 - Nom d'utilisateur ou d'organisation incorrect
 - Dépôt privé sans authentification
 - Dépôt supprimé ou déplacé
 
-**Solution** : 
+**Solution** :
+
 ```bash
 # Pour les dépôts privés, utiliser l'authentification
 export GITHUB_TOKEN="ghp_xxxxxxxxxxxx"
@@ -505,11 +514,12 @@ curl https://api.github.com/users/ZarTek-Creole
 
 ### Erreur "API rate limit exceeded"
 
-**Information** : 
+**Information** :
+
 - Sans token : 60 requêtes/heure (rate limit API publique)
 - Avec token : 5000 requêtes/heure (rate limit API authentifié)
 
-**Solution** : 
+**Solution** :
 
 ```bash
 # Configurer un token GitHub

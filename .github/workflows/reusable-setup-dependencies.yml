@@ -1,0 +1,211 @@
+name: Setup Dependencies (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      install_shellcheck:
+        required: false
+        type: boolean
+        default: true
+      install_bats:
+        required: false
+        type: boolean
+        default: true
+      install_kcov:
+        required: false
+        type: boolean
+        default: false
+      install_markdownlint:
+        required: false
+        type: boolean
+        default: false
+      install_pandoc:
+        required: false
+        type: boolean
+        default: false
+      install_shellspec:
+        required: false
+        type: boolean
+        default: false
+      os:
+        required: false
+        type: string
+        default: ubuntu-latest
+
+jobs:
+  setup:
+    runs-on: ${{ inputs.os }}
+    outputs:
+      shellcheck_version: ${{ steps.shellcheck.outputs.version }}
+      bats_version: ${{ steps.bats.outputs.version }}
+      markdownlint_version: ${{ steps.markdownlint.outputs.version }}
+      kcov_installed: ${{ steps.kcov.outputs.installed }}
+      shellspec_installed: ${{ steps.shellspec.outputs.installed }}
+    
+    steps:
+      - name: Setup system dependencies
+        run: |
+          if [ "$RUNNER_OS" == "Linux" ]; then
+            sudo apt-get update
+            sudo apt-get install -y jq parallel git curl bash build-essential
+          else
+            brew install jq parallel git curl bash
+          fi
+          echo "✅ System dependencies installed"
+      
+      - name: Cache ShellCheck
+        if: inputs.install_shellcheck
+        id: cache-shellcheck
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/shellcheck
+            /usr/bin/shellcheck
+            /usr/local/bin/shellcheck
+          key: ${{ runner.os }}-shellcheck-latest
+          restore-keys: |
+            ${{ runner.os }}-shellcheck-
+      
+      - name: Install ShellCheck
+        if: inputs.install_shellcheck && steps.cache-shellcheck.outputs.cache-hit != 'true'
+        id: shellcheck
+        run: |
+          if [ "$RUNNER_OS" == "Linux" ]; then
+            sudo apt-get install -y shellcheck
+          else
+            brew install shellcheck
+          fi
+          VERSION=$(shellcheck --version | grep version | awk '{print $2}')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "✅ ShellCheck $VERSION installed"
+      
+      - name: Cache Bats
+        if: inputs.install_bats
+        id: cache-bats
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.npm-global
+            /usr/local/bin/bats
+            /usr/bin/bats
+          key: ${{ runner.os }}-bats-latest
+          restore-keys: |
+            ${{ runner.os }}-bats-
+      
+      - name: Install Bats
+        if: inputs.install_bats && steps.cache-bats.outputs.cache-hit != 'true'
+        id: bats
+        run: |
+          if command -v bats >/dev/null 2>&1; then
+            VERSION=$(bats --version 2>/dev/null || echo "unknown")
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "✅ Bats already installed"
+          else
+            npm install -g bats@latest
+            VERSION=$(bats --version 2>/dev/null || echo "1.12.1")
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "✅ Bats $VERSION installed"
+          fi
+      
+      - name: Cache Markdownlint
+        if: inputs.install_markdownlint
+        id: cache-markdownlint
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm-global
+          key: ${{ runner.os }}-markdownlint-latest
+          restore-keys: |
+            ${{ runner.os }}-markdownlint-
+      
+      - name: Install Markdownlint
+        if: inputs.install_markdownlint && steps.cache-markdownlint.outputs.cache-hit != 'true'
+        id: markdownlint
+        run: |
+          if command -v markdownlint >/dev/null 2>&1; then
+            VERSION=$(markdownlint --version | head -1)
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "✅ Markdownlint already installed"
+          else
+            npm install -g markdownlint-cli@latest
+            VERSION=$(markdownlint --version | head -1)
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "✅ Markdownlint $VERSION installed"
+          fi
+      
+      - name: Cache Pandoc
+        if: inputs.install_pandoc
+        id: cache-pandoc
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/bin/pandoc
+          key: ${{ runner.os }}-pandoc-latest
+          restore-keys: |
+            ${{ runner.os }}-pandoc-
+      
+      - name: Install Pandoc
+        if: inputs.install_pandoc && steps.cache-pandoc.outputs.cache-hit != 'true'
+        run: |
+          if [ "$RUNNER_OS" == "Linux" ]; then
+            sudo apt-get install -y pandoc
+          else
+            brew install pandoc
+          fi
+          VERSION=$(pandoc --version | head -1 | awk '{print $2}')
+          echo "✅ Pandoc $VERSION installed"
+      
+      - name: Cache kcov
+        if: inputs.install_kcov && runner.os == 'Linux'
+        id: cache-kcov
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/kcov
+            /usr/local/bin/kcov
+          key: ${{ runner.os }}-kcov-v38
+          restore-keys: |
+            ${{ runner.os }}-kcov-
+      
+      - name: Build kcov
+        if: inputs.install_kcov && runner.os == 'Linux' && steps.cache-kcov.outputs.cache-hit != 'true'
+        id: kcov
+        run: |
+          if command -v kcov >/dev/null 2>&1; then
+            VERSION=$(kcov --version | head -1 || echo "v38")
+            echo "installed=true" >> $GITHUB_OUTPUT
+            echo "✅ kcov $VERSION already installed"
+          else
+            echo "Building kcov..."
+            sudo apt-get install -y libcurl4-openssl-dev libelf-dev libdw-dev cmake gcc binutils-dev
+            wget -q https://github.com/SimonKagstrom/kcov/archive/v38.tar.gz
+            tar xzf v38.tar.gz
+            cd kcov-38
+            mkdir build && cd build
+            cmake ..
+            make -j$(nproc)
+            sudo make install
+            echo "installed=true" >> $GITHUB_OUTPUT
+            echo "✅ kcov v38 installed"
+          fi
+      
+      - name: Cache ShellSpec
+        if: inputs.install_shellspec
+        id: cache-shellspec
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.local/share/shellspec
+            bin
+          key: ${{ runner.os }}-shellspec-0.28.1
+          restore-keys: |
+            ${{ runner.os }}-shellspec-
+      
+      - name: Install ShellSpec
+        if: inputs.install_shellspec && steps.cache-shellspec.outputs.cache-hit != 'true'
+        id: shellspec
+        run: |
+          if [ ! -f bin/shellspec ]; then
+            curl -fsSL https://git.io/shellspec | sh -s -- --yes
+          fi
+          echo "$PWD/bin" >> $GITHUB_PATH
+          echo "installed=true" >> $GITHUB_OUTPUT
+          echo "✅ ShellSpec installed"

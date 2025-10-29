@@ -222,26 +222,26 @@ auth_validate_token() {
 # Retourne les headers curl avec authentification
 auth_get_headers() {
     local method="$1"
-    local headers=""
+    local header_value=""
     
     case "$method" in
         token)
             if [ -n "${GITHUB_TOKEN:-}" ]; then
-                # IMPORTANT: Les quotes sont nécessaires pour que curl traite correctement la valeur du header
-                headers="-H \"Authorization: token $GITHUB_TOKEN\""
+                # Retourner la valeur du header pour utilisation avec -H
+                header_value="Authorization: token $GITHUB_TOKEN"
             fi
             ;;
         ssh)
             # Pour SSH, pas de headers spéciaux nécessaires
-            headers=""
+            header_value=""
             ;;
         public)
             # Mode public, pas d'authentification
-            headers=""
+            header_value=""
             ;;
     esac
     
-    echo "$headers"
+    echo "$header_value"
 }
 
 # Transforme une URL HTTPS en SSH ou vice versa selon la méthode d'auth

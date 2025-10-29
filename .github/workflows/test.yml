@@ -3,14 +3,44 @@ name: Tests
 on:
   push:
     branches: [ main, develop ]
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - 'CHANGELOG.md'
   pull_request:
     branches: [ main, develop ]
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - 'CHANGELOG.md'
   workflow_dispatch:
 
+# Masquer automatiquement les secrets
+env:
+  ACTIONS_STEP_DEBUG: false
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+  actions: read
+
 jobs:
+  setup:
+    uses: ./.github/workflows/reusable-setup-dependencies.yml
+    with:
+      install_shellcheck: true
+      install_bats: true
+      install_kcov: false
+      install_markdownlint: false
+      install_pandoc: false
+      install_shellspec: true
+
   test:
+    needs: setup
     name: Test on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     
     strategy:
       fail-fast: false
@@ -21,39 +51,72 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Setup shellspec
+    - name: Cache ShellSpec
+      id: cache-shellspec
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.local/share/shellspec
+          bin
+        key: ${{ runner.os }}-shellspec-0.28.1
+        restore-keys: |
+          ${{ runner.os }}-shellspec-
+
+    - name: Setup ShellSpec
       run: |
-        curl -fsSL https://git.io/shellspec | sh -s -- --yes
+        if [ ! -f bin/shellspec ]; then
+          echo "Installing ShellSpec..."
+          curl -fsSL https://git.io/shellspec | sh -s -- --yes
+        else
+          echo "✅ ShellSpec already installed (cached)"
+        fi
         echo "$PWD/bin" >> $GITHUB_PATH
 
     - name: Setup dependencies
       run: |
-        sudo apt-get update || true
-        sudo apt-get install -y jq || true
-        brew install jq || true
+        if [ "$RUNNER_OS" == "Linux" ]; then
+          sudo apt-get update -qq
+          sudo apt-get install -y jq shellcheck
+        else
+          brew install jq shellcheck
+        fi
 
     - name: Run ShellSpec tests
-      run: shellspec tests/spec/
       continue-on-error: false
+      timeout-minutes: 10
+      run: shellspec tests/spec/
 
     - name: Run Bats tests
-      run: bats tests/unit/ || true
+      continue-on-error: true
+      timeout-minutes: 8
+      run: |
+        if command -v bats >/dev/null 2>&1; then
+          bats tests/unit/ || true
+        else
+          echo "⚠️ Bats not installed, skipping"
+        fi
 
     - name: Run ShellCheck
-      run: |
-        if command -v shellcheck >/dev/null 2>&1; then
-          shellcheck -S error lib/**/*.sh config/config.sh git-mirror.sh
-        else
-          echo "ShellCheck non installé, installation..."
-          sudo apt-get update && sudo apt-get install -y shellcheck || brew install shellcheck
-          shellcheck -S error lib/**/*.sh config/config.sh git-mirror.sh
-        fi
       continue-on-error: false
+      run: |
+        shellcheck -S error lib/**/*.sh config/config.sh git-mirror.sh
 
     - name: Upload coverage
-      if: matrix.os == 'ubuntu-latest'
-      uses: codecov/codecov-action@v3
+      if: matrix.os == 'ubuntu-latest' && always()
+      uses: codecov/codecov-action@v4
       with:
         files: ./coverage/report.json
         fail_ci_if_error: false
+        token: ${{ secrets.CODECOV_TOKEN }}
 
+    - name: Upload test artifacts
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-artifacts-${{ matrix.os }}
+        path: |
+          coverage/
+          result/
+        retention-days: 90
+        compression-level: 9
+        if-no-files-found: ignore

@@ -1,0 +1,58 @@
+name: 'Setup Bash Testing Environment'
+description: 'Install required dependencies for Bash testing (shellcheck, bats, etc.)'
+
+inputs:
+  install_shellcheck:
+    description: 'Install shellcheck'
+    required: false
+    default: 'true'
+  install_bats:
+    description: 'Install bats'
+    required: false
+    default: 'true'
+  install_parallel:
+    description: 'Install GNU parallel'
+    required: false
+    default: 'true'
+
+runs:
+  using: composite
+  steps:
+    - name: Install ShellCheck
+      if: inputs.install_shellcheck == 'true'
+      shell: bash
+      run: |
+        if command -v shellcheck >/dev/null 2>&1; then
+          echo "✅ ShellCheck already installed"
+        elif [ "$RUNNER_OS" == "Linux" ]; then
+          sudo apt-get install -y shellcheck
+        else
+          brew install shellcheck
+        fi
+
+    - name: Install Bats
+      if: inputs.install_bats == 'true'
+      shell: bash
+      run: |
+        if command -v bats >/dev/null 2>&1; then
+          echo "✅ Bats already installed"
+        else
+          INFECTION=0
+          while [ $INFECTION -lt 3 ] && ! command -v bats >/dev/null 2>&1; do
+            npm install -g bats@latest && break || ((INFECTION++))
+            [ $INFECTION -lt 3 ] && sleep 5
+          done
+        fi
+
+    - name: Install GNU Parallel and dependencies
+      if: inputs.install_parallel == 'true'
+      shell: bash
+      run: |
+        if command -v parallel >/dev/null 2>&1; then
+          echo "✅ GNU parallel already installed"
+        elif [ "$RUNNER_OS" == "Linux" ]; then
+          sudo apt-get install -y jq parallel git curl bash
+        else
+          brew install jq parallel git curl bash
+        fi
+

@@ -3,19 +3,43 @@ name: Documentation
 on:
   push:
     branches: [ main ]
-    paths: [ 'docs/**', 'README.md', '*.md' ]
+    paths:
+      - 'docs/**'
+      - 'README.md'
+      - '*.md'
+      - '.github/workflows/docs.yml'
+  workflow_dispatch:
 
 jobs:
   docs:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     
     steps:
-    - uses: actions/checkout@v3
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Cache dependencies
+      id: cache-docs-deps
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.npm-global
+        key: ${{ runner.os }}-docs-deps
+        restore-keys: |
+          ${{ runner.os }}-docs-deps-
     
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y pandoc markdownlint-cli
+        sudo apt-get install -y pandoc
+        
+        # Install markdownlint-cli only if not cached
+        if ! command -v markdownlint >/dev/null 2>&1; then
+          npm install -g markdownlint-cli@latest
+        else
+          echo "✅ markdownlint already installed (cached)"
+        fi
     
     - name: Validate documentation
       run: |
