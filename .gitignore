@@ -111,18 +111,20 @@ test-results/
 # Documentation générée
 # ===========================================
 docs/generated/
-*.1
-*.pdf
-*.html
+docs/*.1
+docs/*.pdf
+docs/*.html
 
 # ===========================================
 # Métriques et statistiques
 # ===========================================
 metrics/
 *.metrics
-*.json
-*.csv
-*.stat
+# Éviter d'exclure tous les JSON/CSV/HTML (trop agressif)
+# Ne garder que les métriques spécifiques
+# *metrics*.json
+# *metrics*.csv
+# *metrics*.html
 
 # ===========================================
 # Fichiers de parallélisation
