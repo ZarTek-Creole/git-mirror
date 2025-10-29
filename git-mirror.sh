@@ -831,9 +831,9 @@ main() {
                 if [ $((counter % 10)) -eq 0 ]; then
                     _save_state
                 fi
-                fi
-            done <<< "$repos_to_process"
-        fi
+            fi
+        done <<< "$repos_to_process"
+    fi
     
     # Résumé final
     log_info "=== Résumé de la synchronisation ==="

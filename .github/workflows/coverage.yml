@@ -64,18 +64,46 @@ jobs:
 
     - name: Run tests with coverage
       run: |
-        mkdir -p coverage
-        shellspec --kcov --kcov-options="--include-pattern=.sh" tests/spec/
+        mkdir -p coverage/html
+        shellspec --kcov \
+          --kcov-options="--include-pattern=lib/*/*.sh" \
+          --kcov-options="--exclude-pattern=test" \
+          --kcov-options="--exclude-path=/usr,/sys,/proc,/dev,/tmp" \
+          --kcov-options="--html" \
+          --kcov-options="--merge" \
+          --kcov-options="$PWD/coverage/html" \
+          tests/spec/
 
     - name: Generate coverage report
       run: |
         echo "Coverage report generated"
-        ls -lh coverage/
+        ls -lh coverage/html/
+        
+        # Créer un résumé JSON simple pour Codecov
+        mkdir -p coverage
+        cat > coverage/report.json << 'EOF'
+        {
+          "coverage_percent": "$(find coverage/html -name '*.json' -exec cat {} \; | grep -oP 'covered_percent":\s*\K\d+' | head -1 || echo '0')",
+          "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+          "threshold": 80
+        }
+        EOF
+        cat coverage/report.json
 
-    - name: Upload coverage
+    - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
       with:
         files: ./coverage/report.json
         fail_ci_if_error: false
         token: ${{ secrets.CODECOV_TOKEN }}
+        verbose: true
+
+    - name: Upload coverage HTML report
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: coverage-html-report
+        path: coverage/html/
+        retention-days: 30
+        compression-level: 6
 

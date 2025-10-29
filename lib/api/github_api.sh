@@ -177,12 +177,20 @@ api_fetch_with_cache() {
     local temp_file
     temp_file=$(mktemp)
     
+    # Construire la commande curl proprement
     if [ -n "$headers" ]; then
-        curl -s -w "\nHTTP_CODE:%{http_code}\n" "$headers" \
-             -H "Accept: application/vnd.github.v3+json" "$url" > "$temp_file" 2>/dev/null
+        # Séparer la clé et la valeur du header
+        local header_key header_value
+        header_key=$(echo "$headers" | cut -d: -f1)
+        header_value=$(echo "$headers" | cut -d: -f2- | sed 's/^ //')
+        curl -s -w "\nHTTP_CODE:%{http_code}\n" \
+             -H "$header_key: $header_value" \
+             -H "Accept: application/vnd.github.v3+json" \
+             "$url" > "$temp_file" 2>/dev/null
     else
         curl -s -w "\nHTTP_CODE:%{http_code}\n" \
-             -H "Accept: application/vnd.github.v3+json" "$url" > "$temp_file" 2>/dev/null
+             -H "Accept: application/vnd.github.v3+json" \
+             "$url" > "$temp_file" 2>/dev/null
     fi
     
     # Extraire le code HTTP (dernière ligne)
@@ -315,7 +323,12 @@ api_fetch_all_repos() {
     fi
     
     while true; do
-        local url="${api_url}?page=${page}&per_page=${per_page}&sort=updated&direction=desc&type=${repo_type_param}"
+        # Construire l'URL avec les paramètres appropriés
+        local url="${api_url}?page=${page}&per_page=${per_page}&sort=updated&direction=desc"
+        # Ajouter le paramètre type seulement si nécessaire et différent de 'all'
+        if [ -n "${repo_type_param:-}" ] && [ "$repo_type_param" != "all" ]; then
+            url="${url}&type=${repo_type_param}"
+        fi
         
         log_debug "URL appelée: $url" >&2
         log_debug "Récupération page $page..." >&2

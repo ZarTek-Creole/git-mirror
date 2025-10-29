@@ -407,6 +407,51 @@ Le projet inclut 12 fichiers de configuration spécialisés dans `config/` :
 
 Ces fichiers permettent de personnaliser le comportement du script sans modifier le code source.
 
+### Tests et Coverage du Code
+
+Le projet inclut une suite complète de tests avec ShellSpec et analyse de coverage avec kcov.
+
+#### Générer le Coverage Localement
+
+```bash
+# Générer le rapport de coverage (installe automatiquement ShellSpec et kcov si nécessaire)
+./scripts/coverage-report.sh
+
+# Ou via Makefile
+make test-coverage
+
+# Ouvrir le rapport HTML
+make test-coverage-html
+
+# Nettoyer les fichiers de coverage
+make test-coverage-clean
+```
+
+#### Exécuter les Tests
+
+```bash
+# Tous les tests
+make test
+
+# Seulement ShellSpec
+shellspec tests/spec/
+
+# Seulement ShellCheck
+make test-shellcheck
+
+# Seulement Bats
+make test-bats
+```
+
+#### Comprendre le Coverage
+
+- **Seuil minimum** : 80% de coverage global
+- **Modules critiques** : 90%+ (api, git, auth)
+- **Rapport HTML** : `coverage/html/index.html`
+- **Rapport JSON** : `coverage/report.json` (pour CI/CD)
+
+Le coverage est automatiquement généré dans le workflow CI et uploadé en tant qu'artifact.
+
 ## Matrice de Compatibilité
 
 | OS | Bash | Git | jq | curl | GNU Parallel | Status |
