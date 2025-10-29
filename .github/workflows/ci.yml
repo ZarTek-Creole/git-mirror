@@ -1,14 +1,15 @@
+---
 name: CI Tests
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
     paths-ignore:
       - 'docs/**'
       - '*.md'
       - '.github/**'
   pull_request:
-    branches: [ main ]
+    branches: [main]
     paths-ignore:
       - 'docs/**'
       - '*.md'

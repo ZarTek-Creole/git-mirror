@@ -1,14 +1,16 @@
+---
+---
 name: CI - Unified Pipeline
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
     paths-ignore:
       - 'docs/**'
       - '*.md'
       - '.github/ISSUE_TEMPLATE/**'
   pull_request:
-    branches: [ main ]
+    branches: [main]
     paths-ignore:
       - 'docs/**'
       - '*.md'
@@ -60,7 +62,7 @@ jobs:
             type: integration  # Integration only on newer OS
     with:
       test_type: ${{ matrix.type }}
-      test_os: ${{ matrix.os }}
+            enable_coverage: ${{ matrix.os == 'ubuntu-latest' && matrix.type == 'unit' }}
       enable_coverage: ${{ matrix.os == 'ubuntu-latest' && matrix.type == 'unit' }}
       parallel_jobs: 3
 
