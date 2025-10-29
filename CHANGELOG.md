@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.0] - 2025-01-29
+
+### Added
+- Centralized error() and warn() functions in logger module
+- Complete benchmarking script (scripts/benchmark.sh)
+- Man pages (docs/git-mirror.1 + compressed version)
+- Debian package creation script (scripts/create-deb-package.sh)
+- RPM package creation script (scripts/create-rpm-package.sh)
+- Homebrew formula (git-mirror.rb)
+- Complete distribution packaging support
+
+### Changed
+- Enhanced logging module with standard error() function
+- Improved compatibility with industry-standard patterns
+- Updated documentation with packaging instructions
+
+### Improved
+- Distribution packaging ready for deb, rpm, and brew
+- Professional man pages for command-line documentation
+- Automated benchmarking for performance monitoring
+
 ## [Unreleased]
 
 ### Added
