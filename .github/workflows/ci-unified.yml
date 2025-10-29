@@ -1,0 +1,107 @@
+name: CI - Unified Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - '.github/ISSUE_TEMPLATE/**'
+  pull_request:
+    branches: [ main ]
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - '.github/ISSUE_TEMPLATE/**'
+
+env:
+  ACTIONS_STEP_DEBUG: false
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+  actions: read
+
+jobs:
+  # Phase 1: Quality Checks
+  quality:
+    name: Code Quality Validation
+    uses: ./.github/workflows/reusable-quality-checks.yml
+    with:
+      enable_shellcheck: true
+      enable_bats: true
+      enable_shellspec: false
+      strict_mode: false
+
+  # Phase 2: Security Scan
+  security:
+    name: Security Analysis
+    uses: ./.github/workflows/security-scan.yml
+    secrets: inherit
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+
+  # Phase 3: Test Suite Matrix
+  test:
+    name: Test Suite - ${{ matrix.os }} - ${{ matrix.type }}
+    uses: ./.github/workflows/reusable-test-suite.yml
+    needs: [quality]
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        os: [ubuntu-20.04, ubuntu-22.04, ubuntu-latest]
+        type: [unit, integration]
+        exclude:
+          - os: ubuntu-20.04
+            type: integration  # Integration only on newer OS
+    with:
+      test_type: ${{ matrix.type }}
+      test_os: ${{ matrix.os }}
+      enable_coverage: ${{ matrix.os == 'ubuntu-latest' && matrix.type == 'unit' }}
+      parallel_jobs: 3
+
+  # Phase 4: Coverage Analysis
+  coverage:
+    name: Code Coverage Analysis
+    uses: ./.github/workflows/coverage.yml
+    needs: [quality, security]
+    if: github.event_name == 'pull_request' && github.ref == 'refs/heads/main'
+
+  # Phase 5: Integration Tests
+  integration:
+    name: Integration Tests
+    uses: ./.github/workflows/integration.yml
+    needs: [quality]
+    secrets: inherit
+    if: github.event_name == 'pull_request' && github.ref == 'refs/heads/main'
+
+  # Final: Status Check
+  ci-status:
+    name: CI Status Summary
+    runs-on: ubuntu-latest
+    needs: [quality, security, test]
+    if: always()
+
+    steps:
+      - name: CI Status Report
+        run: |
+          echo "=== CI Pipeline Status ==="
+          echo "Quality Checks: ${{ needs.quality.result }}"
+          echo "Security Scan: ${{ needs.security.result }}"
+          echo "Test Suite: ${{ needs.test.result }}"
+          echo ""
+          
+          if [[ "${{ needs.quality.result }}" == "success" ]] && \
+             [[ "${{ needs.security.result }}" == "success" ]] && \
+             [[ "${{ needs.test.result }}" == "success" ]]; then
+            echo "✅ All CI checks passed"
+            exit 0
+          else
+            echo "❌ CI pipeline failed"
+            exit 1
+          fi
+

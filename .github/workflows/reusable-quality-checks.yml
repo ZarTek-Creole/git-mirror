@@ -1,0 +1,135 @@
+name: Reusable Quality Checks
+
+on:
+  workflow_call:
+    inputs:
+      enable_shellcheck:
+        required: false
+        type: boolean
+        default: true
+      enable_bats:
+        required: false
+        type: boolean
+        default: true
+      enable_shellspec:
+        required: false
+        type: boolean
+        default: false
+      strict_mode:
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  quality-checks:
+    name: Code Quality Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Setup dependencies
+        uses: ./.github/actions/setup-bash-environment
+        with:
+          install_shellcheck: ${{ inputs.enable_shellcheck }}
+          install_bats: ${{ inputs.enable_bats }}
+          install_parallel: true
+
+      - name: Cache ShellCheck results
+        uses: actions/cache@v4
+        id: shellcheck-cache
+        with:
+          path: |
+            ~/.cache/shellcheck-results
+          key: ${{ runner.os }}-shellcheck-${{ hashFiles('**/*.sh') }}
+          restore-keys: |
+            ${{ runner.os }}-shellcheck-
+
+      - name: Run ShellCheck (Strict Mode)
+        if: inputs.enable_shellcheck && inputs.strict_mode
+        continue-on-error: false
+        run: |
+          echo "=== ShellCheck Strict Mode ==="
+          shellcheck \
+            --external-sources \
+            --check-sourced \
+            --enable=all \
+            --shell=bash \
+            git-mirror.sh lib/**/*.sh config/**/*.sh || exit 1
+          
+          echo "✅ ShellCheck strict mode passed"
+
+      - name: Run ShellCheck (Standard Mode)
+        if: inputs.enable_shellcheck && !inputs.strict_mode
+        continue-on-error: false
+        run: |
+          echo "=== ShellCheck Standard Mode ==="
+          shellcheck \
+            --external-sources \
+            git-mirror.sh lib/**/*.sh config/**/*.sh || exit 1
+          
+          echo "✅ ShellCheck standard mode passed"
+
+      - name: Cache Bats test results
+        if: inputs.enable_bats
+        uses: actions/cache@v4
+        id: bats-cache
+        with:
+          path: |
+            ~/.cache/bats-results
+          key: ${{ runner.os }}-bats-${{ hashFiles('tests/unit/**/*.bats') }}
+          restore-keys: |
+            ${{ runner.os }}-bats-
+
+      - name: Run Bats unit tests
+        if: inputs.enable_bats
+        continue-on-error: false
+        timeout-minutes: 10
+        run: |
+          echo "=== Running Bats Unit Tests ==="
+          bats tests/unit/ || exit 1
+          echo "✅ All Bats tests passed"
+
+      - name: Setup ShellSpec
+        if: inputs.enable_shellspec
+        run: |
+          curl -fsSL https://git.io/shellspec | sh -s -- --yes
+          echo "$PWD/bin" >> $GITHUB_PATH
+
+      - name: Run ShellSpec tests
+        if: inputs.enable_shellspec
+        continue-on-error: false
+        timeout-minutes: 15
+        run: |
+          echo "=== Running ShellSpec Tests ==="
+          shellspec tests/spec/ || exit 1
+          echo "✅ All ShellSpec tests passed"
+
+      - name: Validation summary
+        if: always()
+        run: |
+          echo "=== Quality Checks Summary ==="
+          echo "ShellCheck: ${{ inputs.enable_shellcheck }}"
+          echo "Bats: ${{ inputs.enable_bats }}"
+          echo "ShellSpec: ${{ inputs.enable_shellspec }}"
+          echo "Strict Mode: ${{ inputs.strict_mode }}"
+          echo ""
+          echo "✅ Quality validation completed"
+
+      - name: Upload quality reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-reports
+          path: |
+            **/shellcheck-results.txt
+            **/test-results.txt
+          compression-level: 9
+          retention-days: 90
+          if-no-files-found: ignore
+

@@ -1,0 +1,116 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+  pull-requests: read
+  checks: read
+  actions: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Cache dependencies
+      id: cache-deps
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.npm-global
+          /usr/local/bin/bats
+        key: ${{ runner.os }}-release-deps
+        restore-keys: |
+          ${{ runner.os }}-release-deps-
+    
+    - name: Setup Bash environment
+      uses: ./.github/actions/setup-bash-environment
+      with:
+        install_shellcheck: true
+        install_bats: true
+        install_parallel: true
+    
+    - name: Run tests
+      timeout-minutes: 10
+      run: |
+        shellcheck git-mirror.sh lib/*/*.sh config/*.sh
+        bats tests/unit/
+        bash tests/integration/test_integration.sh
+    
+    - name: Create package
+      run: |
+        mkdir -p dist/
+        tar -czf dist/git-mirror-${GITHUB_REF_NAME}.tar.gz \
+          --exclude='.git' \
+          --exclude='.git-mirror-cache' \
+          --exclude='.git-mirror-state*' \
+          --exclude='dist' \
+          --exclude='test-results' \
+          --exclude='node_modules' \
+          .
+        ls -lh dist/
+    
+    - name: Read CHANGELOG
+      id: changelog
+      run: |
+        if [ -f CHANGELOG.md ]; then
+          # Extract the section for this version
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "Looking for version $VERSION in CHANGELOG.md"
+          
+          # Try to extract the changelog for this version
+          awk "/^## \[${VERSION}\]/,/^## \[/" CHANGELOG.md | head -n -1 > /tmp/release-notes.md
+          
+          if [ -s /tmp/release-notes.md ]; then
+            cat /tmp/release-notes.md
+          else
+            # Fallback to default release notes
+            echo "## Changes in this Release
+          
+          - Please see [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/${GITHUB_REF_NAME}/CHANGELOG.md) for details.
+          
+          ## Installation
+          
+          \`\`\`bash
+          wget https://github.com/${{ github.repository }}/releases/download/${GITHUB_REF_NAME}/git-mirror-${GITHUB_REF_NAME}.tar.gz
+          tar -xzf git-mirror-${GITHUB_REF_NAME}.tar.gz
+          cd git-mirror-${GITHUB_REF_NAME}
+          ./install.sh --deps --test
+          \`\`\`
+          
+          ## Usage
+          
+          \`\`\`bash
+          # Basic usage
+          git-mirror users microsoft
+          
+          # With parallel processing
+          git-mirror users microsoft --parallel 5
+          
+          # Dry run mode
+          git-mirror users microsoft --dry-run
+          \`\`\`" > /tmp/release-notes.md
+            cat /tmp/release-notes.md
+          fi
+        else
+          echo "CHANGELOG.md not found"
+        fi
+    
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ github.ref_name }}
+        name: Release ${{ github.ref_name }}
+        body_path: /tmp/release-notes.md
+        files: dist/git-mirror-${GITHUB_REF_NAME}.tar.gz
+        draft: false
+        prerelease: false
+        generate_release_notes: true

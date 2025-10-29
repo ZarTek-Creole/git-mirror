@@ -1,0 +1,153 @@
+# Git Mirror - .gitignore
+
+# ===========================================
+# Répertoires de destination (clonage)
+# ===========================================
+# Par défaut, le script clone vers ./repositories, mais peut être personnalisé
+repositories/
+zartek/
+**/repositories/
+**/mirrors/
+**/clones/
+
+# ===========================================
+# Cache et état du script
+# ===========================================
+.git-mirror-cache/
+.git-mirror-state/
+.git-mirror-state.json
+*.cache
+*.state
+
+# ===========================================
+# Fichiers temporaires
+# ===========================================
+*.tmp
+*.temp
+*.log
+*.pid
+*.lock
+*.lockfile
+**/*.log
+**/*.pid
+
+# ===========================================
+# Répertoires système et éditeurs
+# ===========================================
+# Système
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Éditeurs
+.vscode/
+.idea/
+.cursor/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# ===========================================
+# Fichiers de sauvegarde et backup
+# ===========================================
+*.bak
+*.backup
+*~
+.bak/
+backup/
+
+# ===========================================
+# Environnement et configuration locale
+# ===========================================
+.env
+.env.local
+.env.*.local
+config/local.conf
+**/local.conf
+config.local
+
+# ===========================================
+# Fichiers de build et distribution
+# ===========================================
+dist/
+build/
+*.tar.gz
+*.zip
+*.rar
+*.7z
+
+# ===========================================
+# Dépendances (si jamais ajoutées)
+# ===========================================
+node_modules/
+vendor/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# ===========================================
+# Fichiers de test et coverage
+# ===========================================
+coverage/
+.nyc_output/
+*.lcov
+*.coverage
+.cache/
+test-results/
+/tmp/
+/temp/
+
+# ===========================================
+# Documentation générée
+# ===========================================
+docs/generated/
+*.1
+*.pdf
+*.html
+
+# ===========================================
+# Métriques et statistiques
+# ===========================================
+metrics/
+*.metrics
+*.json
+*.csv
+*.stat
+
+# ===========================================
+# Fichiers de parallélisation
+# ===========================================
+parallel.log
+*.parallel
+**/*.parallel
+
+# ===========================================
+# Fichiers interactifs et état
+# ===========================================
+interactive/
+*.interactive
+
+# ===========================================
+# Mode incrémental
+# ===========================================
+incremental/
+*.incremental
+
+# ===========================================
+# Fichiers de profil
+# ===========================================
+*.prof
+*.profile
+profilage/.shellspec-quick.log
+.shellspec
+.secrets

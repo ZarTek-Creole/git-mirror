@@ -1,0 +1,118 @@
+name: 'Advanced Cache Setup'
+description: 'Setup hierarchical composite cache for all dependencies'
+
+inputs:
+  cache_key_suffix:
+    description: 'Suffix for cache key'
+    required: false
+    default: 'default'
+  install_shellcheck:
+    description: 'Cache ShellCheck'
+    required: false
+    default: 'true'
+  install_bats:
+    description: 'Cache Bats'
+    required: false
+    default: 'true'
+  install_kcov:
+    description: 'Cache kcov'
+    required: false
+    default: 'false'
+  install_shellspec:
+    description: 'Cache ShellSpec'
+    required: false
+    default: 'false'
+
+outputs:
+  shellcheck_cache_hit:
+    description: 'ShellCheck cache hit status'
+    value: ${{ steps.composite-cache.outputs.cache-hit }}
+  bats_cache_hit:
+    description: 'Bats cache hit status'
+    value: ${{ steps.composite-cache.outputs.cache-hit }}
+  kcov_cache_hit:
+    description: 'kcov cache hit status'
+    value: ${{ steps.composite-cache.outputs.cache-hit }}
+
+runs:
+  using: composite
+  steps:
+    - name: Composite hierarchical cache
+      id: composite-cache
+      shell: bash
+      run: |
+        echo "=== Composite Cache Setup ==="
+        echo "Cache key suffix: ${{ inputs.cache_key_suffix }}"
+        echo ""
+        # Cache composite avec tous les outils
+        echo "Setting up composite cache for multiple tools..."
+        
+    - name: Cache ShellCheck
+      if: inputs.install_shellcheck == 'true'
+      id: cache-shellcheck
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/shellcheck
+          /usr/bin/shellcheck
+          /usr/local/bin/shellcheck
+        key: ${{ runner.os }}-shellcheck-latest
+        restore-keys: |
+          ${{ runner.os }}-shellcheck-
+
+    - name: Cache Bats
+      if: inputs.install_bats == 'true'
+      id: cache-bats
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.npm-global
+          /usr/local/bin/bats
+          /usr/bin/bats
+        key: ${{ runner.os }}-bats-latest
+        restore-keys: |
+          ${{ runner.os }}-bats-
+
+    - name: Cache kcov
+      if: inputs.install_kcov == 'true' && runner.os == 'Linux'
+      id: cache-kcov
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/kcov
+          /usr/local/bin/kcov
+        key: ${{ runner.os }}-kcov-v38
+        restore-keys: |
+          ${{ runner.os }}-kcov-
+
+    - name: Cache ShellSpec
+      if: inputs.install_shellspec == 'true'
+      id: cache-shellspec
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.local/share/shellspec
+          bin
+        key: ${{ runner.os }}-shellspec-0.28.1
+        restore-keys: |
+          ${{ runner.os }}-shellspec-
+
+    - name: Cache status summary
+      shell: bash
+      run: |
+        echo "=== Cache Status Summary ==="
+        echo "ShellCheck: ${{ steps.cache-shellcheck.outputs.cache-hit }}"
+        echo "Bats: ${{ steps.cache-bats.outputs.cache-hit }}"
+        echo "kcov: ${{ steps.cache-kcov.outputs.cache-hit }}"
+        echo "ShellSpec: ${{ steps.cache-shellspec.outputs.cache-hit }}"
+        echo ""
+        
+        TOTAL_HIT=0
+        [ "${{ steps.cache-shellcheck.outputs.cache-hit }}" == "true" ] && ((TOTAL_HIT++))
+        [ "${{ steps.cache-bats.outputs.cache-hit }}" == "true" ] && ((TOTAL_HIT++))
+        [ "${{ steps.cache-kcov.outputs.cache-hit }}" == "true" ] && ((TOTAL_HIT++))
+        [ "${{ steps.cache-shellspec.outputs.cache-hit }}" == "true" ] && ((TOTAL_HIT++))
+        
+        echo "Total cache hits: $TOTAL_HIT"
+        echo "Cache efficiency: $((TOTAL_HIT * 100 / 4))%"
+

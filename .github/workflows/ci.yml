@@ -1,0 +1,110 @@
+name: CI Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - '.github/**'
+  pull_request:
+    branches: [ main ]
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - '.github/**'
+
+# Masquer automatiquement les secrets
+env:
+  ACTIONS_STEP_DEBUG: false
+
+permissions:
+  contents: read
+  pull-requests: read
+  actions: read
+
+jobs:
+  setup:
+    uses: ./.github/workflows/reusable-setup-dependencies.yml
+    with:
+      install_shellcheck: true
+      install_bats: true
+      install_kcov: false
+      install_markdownlint: false
+      install_pandoc: false
+      install_shellspec: false
+
+  test:
+    needs: setup
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        os: [ubuntu-20.04, ubuntu-22.04, macos-latest]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Bash environment
+      uses: ./.github/actions/setup-bash-environment
+      with:
+        install_shellcheck: true
+        install_bats: true
+        install_parallel: true
+    
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.npm-global
+          /usr/local/bin/bats
+        key: ${{ runner.os }}-ci-deps-${{ hashFiles('**/*.sh') }}
+        restore-keys: |
+          ${{ runner.os }}-ci-deps-
+    
+    - name: Run shellcheck
+      continue-on-error: false
+      run: shellcheck git-mirror.sh lib/*/*.sh config/*.sh
+    
+    - name: Run unit tests
+      continue-on-error: false
+      timeout-minutes: 10
+      run: bats tests/unit/
+    
+    - name: Run integration tests
+      continue-on-error: false
+      timeout-minutes: 12
+      run: bash tests/integration/test_integration.sh
+    
+    - name: Run load tests
+      continue-on-error: true
+      timeout-minutes: 10
+      run: |
+        if [ -f tests/load/test_load.sh ]; then
+          bash tests/load/test_load.sh --dry-run --repos 10 --parallel 2
+        else
+          echo "⚠️ Load tests not found, skipping"
+        fi
+    
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results-${{ matrix.os }}
+        path: test-results/
+        retention-days: 90
+        compression-level: 9
+    
+    - name: Upload logs
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: logs-${{ matrix.os }}
+        path: |
+          *.log
+          test-results/*.log
+        retention-days: 30
+        compression-level: 9

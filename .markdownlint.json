@@ -1,0 +1,10 @@
+{
+  "default": true,
+  "line-length": false,
+  "no-duplicate-heading": false,
+  "blanks-around-lists": false,
+  "no-multiple-blanks": false,
+  "blanks-around-fences": false,
+  "fenced-code-language": false,
+  "no-inline-html": false
+}

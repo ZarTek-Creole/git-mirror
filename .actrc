@@ -1,0 +1,5 @@
+# Configuration act pour git-mirror
+--container-architecture linux/amd64
+--secret-file .secrets
+--platform ubuntu-latest=catthehacker/ubuntu:act-latest
+

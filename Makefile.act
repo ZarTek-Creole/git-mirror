@@ -1,0 +1,21 @@
+# Targets pour Act (GitHub Actions testing)
+act-test:
+	@echo "Test des workflows GitHub Actions localement..."
+	@./scripts/test-workflows-local.sh --quick
+
+act-list:
+	@echo "Liste des workflows disponibles:"
+	@./scripts/test-workflows-local.sh --list
+
+act-quick:
+	@echo "Test rapide: ShellCheck workflow..."
+	@./scripts/test-workflows-local.sh --quick
+
+act-workflow:
+	@echo "Usage: make act-workflow WORKFLOW=shellcheck"
+	@if [ -z "$(WORKFLOW)" ]; then \
+		echo "Spécifiez WORKFLOW=nom_du_workflow"; \
+		exit 1; \
+	fi
+	@./scripts/test-workflows-local.sh --workflow $(WORKFLOW)
+

@@ -1,110 +1,615 @@
-# git-mirror
+# Git Mirror
+
+[![CI Status](https://github.com/ZarTek-Creole/git-mirror/workflows/CI/badge.svg)](https://github.com/ZarTek-Creole/git-mirror/actions)
+[![ShellCheck](https://img.shields.io/badge/shellcheck-passed-brightgreen)](https://www.shellcheck.net/)
+[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![Bash](https://img.shields.io/badge/bash-4.4%2B-green)](https://www.gnu.org/software/bash/)
+[![Version](https://img.shields.io/badge/version-2.5.0-orange)](CHANGELOG.md)
+
+## Table des Matières
+
+- [Résumé](#résumé)
+- [Description](#description)
+- [Caractéristiques principales](#caractéristiques-principales)
+- [Dépendances & Prérequis](#dépendances--prérequis)
+- [Utilisation](#utilisation)
+- [Architecture du Projet](#architecture-du-projet)
+- [Documentation](#documentation)
+- [Matrice de Compatibilité](#matrice-de-compatibilité)
+- [Notes importantes](#notes-importantes)
+- [Limitations](#limitations)
+- [Problèmes courants et solutions](#problèmes-courants-et-solutions)
+- [Contributions](#contributions)
+- [Licence](#licence)
+- [Auteur](#auteur)
+- [Donations](#donations)
+
 ## Résumé
-Ce script permet de mettre à jour tous les dépôts d'un utilisateur ou d'une organisation sur GitHub. Il utilise l'API GitHub et l'outil jq pour récupérer la liste des dépôts et exécute la commande git clone ou git pull sur chaque dépôt.
+
+Git Mirror est un script avancé permettant de cloner ou mettre à jour tous les dépôts GitHub d'un utilisateur ou d'une organisation. Il supporte l'authentification, le traitement parallèle, les filtres, et offre une large gamme d'options de configuration.
 
 ## Description
-Ce script permet de cloner ou mettre à jour tous les dépôts GitHub (qui ne sont pas des forks) appartenant à un utilisateur ou une organisation donnée. Il utilise l'API GitHub et l'outil jq pour récupérer la liste des dépôts et exécute la commande git clone ou git pull sur chaque dépôt. Le script définit également un délai d'expiration de 30 secondes pour la commande git afin d'éviter les exécutions de commandes interminables.
 
+Ce script Bash permet de cloner ou mettre à jour tous les dépôts GitHub (avec ou sans forks selon vos préférences) appartenant à un utilisateur ou une organisation donnée. Il utilise l'API GitHub et l'outil jq pour récupérer la liste des dépôts et exécute la commande git clone ou git pull sur chaque dépôt. Le script définit également un délai d'expiration configurable pour la commande git afin d'éviter les exécutions de commandes interminables.
+
+## Caractéristiques principales
+
+- 🔐 **Authentification multiple** : Token GitHub, clé SSH, ou accès public
+- ⚡ **Traitement parallèle** : Utilisation de GNU parallel pour accélérer les opérations
+- 🔍 **Filtrage avancé** : Inclure/exclure des dépôts par patterns
+- 📊 **Métriques** : Export des statistiques en JSON, CSV ou HTML
+- 🎯 **Mode incrémental** : Traite uniquement les dépôts modifiés depuis la dernière synchronisation
+- 🔄 **Mode résumable** : Reprendre une exécution interrompue
+- 🚫 **Exclusion des forks** : Option pour exclure les dépôts forké
+- 🔐 **Filtrage par type** : Récupérer public, privé, ou tous les dépôts
+- 💾 **Cache API** : Réduction des appels API redondants
+- ⏱️ **Profiling** : Analyser les performances du script
 
 ## Dépendances & Prérequis
+
 Pour utiliser ce script, vous devez avoir les outils suivants installés sur votre ordinateur :
-- jq (version 1.5 ou supérieure) : outil de manipulation de JSON en ligne de commande. Vous pouvez l'installer en exécutant la commande suivante :
-  - Ubuntu/Debian : `sudo apt-get install jq`
-  - CentOS/Fedora : `sudo yum install jq`
-  - MacOS : `brew install jq`
-  - Si aucun de ces gestionnaires de paquets n'est disponible, vous pouvez télécharger l'archive de jq depuis le site officiel (https://stedolan.github.io/jq/) et l'installer manuellement.
-- git (version 2.9 ou supérieure) : outil de gestion de versions. Vous pouvez l'installer en exécutant la commande suivante :
+
+- **git** (version 2.25+) : Gestionnaire de versions
   - Ubuntu/Debian : `sudo apt-get install git`
   - CentOS/Fedora : `sudo yum install git`
   - MacOS : `brew install git`
-  - Si aucun de ces gestionnaires de paquets n'est disponible, vous pouvez télécharger l'installateur de git depuis le site officiel (https://git-scm.com/downloads) et l'exécuter.
--  curl : outil de téléchargement de fichiers en ligne de commande. Vous pouvez l'installer en exécutant la commande suivante :
-  - Ubuntu/Debian : sudo apt-get install curl
-  - CentOS/Fedora : sudo yum install curl
-  - MacOS : brew install curl
-  - Si aucun de ces gestionnaires de paquets n'est disponible, vous pouvez télécharger l'archive de curl depuis le site officiel (https://curl.haxx.se/download.html) et l'installer manuellement. Le script utilise également cURL pour envoyer des requêtes HTTP à l'API GitHub. Si cURL n'est pas installé sur votre ordinateur, le script ne fonctionnera pas.
+  - [Télécharger Git](https://git-scm.com/downloads)
+
+- **jq** (version 1.6+) : Manipulation de JSON en ligne de commande
+  - Ubuntu/Debian : `sudo apt-get install jq`
+  - CentOS/Fedora : `sudo yum install jq`
+  - MacOS : `brew install jq`
+  - [Télécharger jq](https://stedolan.github.io/jq/)
+
+- **curl** (version 7.68+) : Transfert de données
+  - Ubuntu/Debian : `sudo apt-get install curl`
+  - CentOS/Fedora : `sudo yum install curl`
+  - MacOS : `brew install curl`
+  - [Télécharger curl](https://curl.haxx.se/download.html)
+
+- **GNU parallel** (optionnel) : Pour le traitement parallèle
+  - Ubuntu/Debian : `sudo apt-get install parallel`
+  - CentOS/Fedora : `sudo yum install parallel`
+  - MacOS : `brew install parallel`
+
+## Installation Rapide
+
+```bash
+# Cloner le dépôt
+git clone https://github.com/ZarTek-Creole/git-mirror.git
+cd git-mirror
+
+# Rendre le script exécutable
+chmod +x git-mirror.sh
+
+# Vérifier les dépendances
+./git-mirror.sh --help
+```
 
 ## Utilisation
-1. Téléchargez le script sur votre ordinateur
-2. Ouvrez un terminal et rendez-vous dans le répertoire où se trouve le script
-3. Exécutez la commande suivante : `./nom_du_script.sh context username_or_orgname`
-   Exemple : pour mettre à jour tous les dépôts de l'utilisateur ZarTek-Creole, exécutez la commande suivante : `./nom_du_script.sh users ZarTek-Creole`
-    La commande prend deux arguments :
-  * **context** : le contexte dans lequel se trouve le nom d'utilisateur ou d'organisation. Peut être soit "users" pour les utilisateurs, soit "orgs" pour les organisations.
-  * **username_or_orgname** : le nom d'utilisateur ou d'organisation dont vous souhaitez cloner ou mettre à jour les dépôts.
-# Limitations
-- Ce script ne fonctionne que pour les dépôts qui ne sont pas des forks. Si vous souhaitez inclure les forks dans la mise à jour, vous devrez enlever l'option &parent=null de la requête API.
-- Le script utilise l'API GitHub, qui a une limite de requêtes par heure. Si vous avez un grand nombre de dépôts, il se peut que vous atteigniez cette limite et que le script ne puisse pas terminer son exécution. Vous pouvez contourner ce problème en utilisant un token d'accès à l'API GitHub, qui vous permet d'avoir un nombre de requêtes plus élevé.
-- Le script ignore les dépôts dont le nom commence par un point (.). Si vous souhaitez inclure ces dépôts, vous pouvez supprimer la ligne `if [[ $repo_name =~ ^\. ]];` then dans la fonction `clone_or_update_repo`.
-- Il définit un délai d'expiration de 30 secondes pour la commande git afin d'éviter les exécutions de commandes interminables. Si une commande git prend plus de 30 secondes à s'exécuter, le script affichera un message d'erreur et passer à l'itération suivante. Le délai d'expiration de 30 secondes pour la commande git peut être modifié en modifiant la valeur de timeout dans le script.
-# Options de configuration
-Vous pouvez modifier la valeur de `timeout` pour définir le temps maximum d'exécution de la commande `git`. Si la commande dépasse ce temps, un message d'erreur sera affiché.
-Vous pouvez ajouter des options à la commande `git clon`e ou `git pull` en modifiant la fonction `clone_or_update_repo`.
 
-### Exemples de commandes
-Voici quelques exemples de commandes qui vous permettront de mettre à jour les dépôts GitHub d'un utilisateur ou d'une organisation :
+### Syntaxe
 
-- Mettre à jour tous les dépôts de l'utilisateur "ZarTek-Creole" :
-```/nom_du_script.sh users ZarTek-Creole```
-- Mettre à jour tous les dépôts de l'organisation "openai" :
-```./nom_du_script.sh organizations openai```
-- Mettre à jour tous les dépôts de l'utilisateur "ZarTek-Creole" en utilisant un délai d'expiration de 60 secondes pour la commande git :
-```timeout=60 ./nom_du_script.sh users ZarTek-Creole```
-Vous pouvez également utiliser ces exemples de commandes en modifiant les arguments `context` et `username_or_orgname` selon vos besoins. N'oubliez pas de remplacer `nom_du_script.sh` par le nom de fichier du script téléchargé.
+```bash
+./git-mirror.sh [OPTIONS] context username_or_orgname
+```
 
+### Arguments
 
+- `context` : Type de contexte (`users` ou `orgs`)
+- `username_or_orgname` : Nom d'utilisateur ou d'organisation GitHub
 
+### Options principales
 
-## Notes
-Le script ignore les dépôts dont le nom commence par un point (`.`).
-Si le *dépôt existe* déjà sur votre ordinateur, la commande `git pull` sera exécutée pour *mettre à jour* le dépôt. Sinon, la commande `git clone` sera exécutée pour *télécharger* le dépôt.
+#### Général
+
+- `-d, --destination DIR` : Répertoire de destination (défaut: ./repositories)
+- `-b, --branch BRANCH` : Branche spécifique à cloner (défaut: branche par défaut)
+- `-h, --help` : Afficher l'aide
+
+#### Options Git
+
+- `-f, --filter FILTER` : Filtre Git pour le clonage partiel (ex: blob:none)
+- `-n, --no-checkout` : Cloner sans checkout initial
+- `-s, --single-branch` : Cloner une seule branche
+- `--depth DEPTH` : Profondeur du clonage shallow (défaut: 1)
+
+#### Performance
+
+- `--parallel JOBS` : Nombre de jobs parallèles (défaut: 1, nécessite GNU parallel)
+- `--timeout SECONDS` : Timeout pour les opérations Git (défaut: 30)
+- `--profile` : Activer le profiling de performance
+
+#### Filtrage
+
+- `--exclude PATTERN` : Exclure les repos correspondant au pattern (peut être utilisé plusieurs fois)
+- `--exclude-file FILE` : Lire les patterns d'exclusion depuis un fichier
+- `--include PATTERN` : Inclure uniquement les repos correspondant au pattern (peut être utilisé plusieurs fois)
+- `--include-file FILE` : Lire les patterns d'inclusion depuis un fichier
+- `--exclude-forks` : Exclure les dépôts forké de la récupération
+- `--repo-type TYPE` : Type de dépôts à récupérer : `all`, `public`, `private` (défaut: all)
+
+#### Mode
+
+- `--resume` : Reprendre une exécution interrompue
+- `--incremental` : Mode incrémental (traite seulement les repos modifiés)
+- `--interactive` : Mode interactif avec confirmations
+- `--confirm` : Afficher un résumé et demander confirmation avant de commencer
+- `--yes, -y` : Mode automatique (ignorer toutes les confirmations)
+- `--dry-run` : Simulation sans actions réelles
+
+#### Sortie
+
+- `-v, --verbose` : Mode verbeux (peut être utilisé plusieurs fois: -vv, -vvv)
+- `-q, --quiet` : Mode silencieux (sortie minimale)
+- `--metrics FILE` : Exporter les métriques vers un fichier (formats: json,csv,html)
+
+#### Avancé
+
+- `--skip-count` : Éviter le calcul du nombre total de dépôts (utile si limite API)
+- `--no-cache` : Désactiver l'utilisation du cache API (forcer les appels API)
+
+### Exemples
+
+#### Utilisation de base
+
+```bash
+# Cloner tous les dépôts d'un utilisateur
+./git-mirror.sh users ZarTek-Creole
+
+# Cloner dans un répertoire spécifique
+./git-mirror.sh -d /path/to/repos users ZarTek-Creole
+
+# Cloner une organisation
+./git-mirror.sh orgs microsoft
+```
+
+#### Options Git avancées
+
+```bash
+# Cloner avec filtre blob:none (économie d'espace)
+./git-mirror.sh -f blob:none users ZarTek-Creole
+
+# Cloner une seule branche (main)
+./git-mirror.sh -b main -s users ZarTek-Creole
+
+# Cloner sans checkout initial
+./git-mirror.sh -n users ZarTek-Creole
+
+# Cloner avec profondeur shallow
+./git-mirror.sh --depth 5 users ZarTek-Creole
+```
+
+#### Traitement parallèle
+
+```bash
+# Cloner avec 5 jobs parallèles
+./git-mirror.sh --parallel 5 users ZarTek-Creole
+
+# Cloner avec 10 jobs parallèles et timeout augmenté
+./git-mirror.sh --parallel 10 --timeout 60 users ZarTek-Creole
+```
+
+#### Filtrage
+
+```bash
+# Exclure certains dépôts
+./git-mirror.sh --exclude "test-*" --exclude "demo-*" users ZarTek-Creole
+
+# Exclure depuis un fichier
+./git-mirror.sh --exclude-file exclude-patterns.txt users ZarTek-Creole
+
+# Inclure uniquement certains dépôts
+./git-mirror.sh --include "project-*" users ZarTek-Creole
+
+# Exclure les forks
+./git-mirror.sh --exclude-forks users ZarTek-Creole
+
+# Récupérer uniquement les dépôts privés (authentification requise)
+./git-mirror.sh --repo-type private users ZarTek-Creole
+
+# Récupérer uniquement les dépôts publics
+./git-mirror.sh --repo-type public users ZarTek-Creole
+
+# Combiner les filtres
+./git-mirror.sh --exclude-forks --repo-type public users ZarTek-Creole
+```
+
+#### Modes d'exécution
+
+```bash
+# Mode dry-run (simulation)
+./git-mirror.sh --dry-run -vv users microsoft
+
+# Mode silencieux
+./git-mirror.sh -q users ZarTek-Creole
+
+# Mode verbeux (plus de détails)
+./git-mirror.sh -vvv users ZarTek-Creole
+
+# Mode incrémental (seulement les dépôts modifiés)
+./git-mirror.sh --incremental users microsoft
+
+# Reprendre une exécution interrompue
+./git-mirror.sh --resume users microsoft
+
+# Mode interactif
+./git-mirror.sh --interactive users ZarTek-Creole
+
+# Mode automatique (sans confirmation)
+./git-mirror.sh --yes users ZarTek-Creole
+```
+
+#### Métriques et monitoring
+
+```bash
+# Exporter les métriques en JSON
+./git-mirror.sh --metrics metrics.json users ZarTek-Creole
+
+# Exporter en CSV
+./git-mirror.sh --metrics metrics.csv --profile users ZarTek-Creole
+
+# Exporter en HTML
+./git-mirror.sh --metrics report.html users ZarTek-Creole
+
+# Profiling des performances
+./git-mirror.sh --profile users ZarTek-Creole
+```
+
+#### Authentification
+
+```bash
+# Utiliser un token GitHub (variable d'environnement)
+export GITHUB_TOKEN="ghp_xxxxxxxxxxxx"
+./git-mirror.sh --repo-type all users ZarTek-Creole
+
+# Utiliser une clé SSH
+export GITHUB_SSH_KEY="/path/to/id_rsa"
+export GITHUB_AUTH_METHOD="ssh"
+./git-mirror.sh users ZarTek-Creole
+
+# Forcer l'authentification publique
+export GITHUB_AUTH_METHOD="public"
+./git-mirror.sh users ZarTek-Creole
+```
+
+### Variables d'environnement
+
+- `GITHUB_TOKEN` : Token d'accès personnel GitHub
+- `GITHUB_SSH_KEY` : Chemin vers la clé SSH privée
+- `GITHUB_AUTH_METHOD` : Force la méthode d'authentification (`token`, `ssh`, `public`)
+
+## Architecture du Projet
+
+Ce projet utilise une architecture modulaire avec 13 modules spécialisés organisés dans `lib/`. Le script principal `git-mirror.sh` agit comme une façade orchestrant l'ensemble.
+
+📚 **Pour plus de détails techniques** : Consultez [ARCHITECTURE.md](docs/ARCHITECTURE.md)
+
+```
+git-mirror/
+├── git-mirror.sh          # Script principal (928 lignes)
+├── config/                 # Configuration
+│   ├── config.sh          # Config principale (330 lignes)
+│   └── *.conf             # 12 fichiers de config spécialisés
+├── lib/                    # 13 modules fonctionnels (3905 lignes)
+│   ├── api/               # API GitHub
+│   ├── auth/              # Authentification
+│   ├── cache/             # Cache API
+│   ├── filters/           # Filtrage
+│   ├── git/               # Opérations Git
+│   ├── incremental/       # Mode incrémental
+│   ├── interactive/       # Mode interactif
+│   ├── logging/           # Système de logs
+│   ├── metrics/           # Métriques
+│   ├── parallel/          # Parallélisation
+│   ├── state/             # Gestion d'état
+│   ├── utils/             # Utilitaires (profiling)
+│   └── validation/        # Validation
+└── tests/                  # 7 catégories de tests
+    ├── unit/              # Tests unitaires (13 fichiers)
+    ├── integration/       # Tests d'intégration
+    ├── regression/        # Tests de régression
+    ├── load/              # Tests de charge
+    ├── mocks/             # Données mockées
+    └── utils/             # Utilitaires de test
+```
+
+## Documentation
+
+### Option --repo-type
+
+Permet de filtrer les dépôts par type :
+
+- `all` (défaut) : Récupère tous les dépôts (public + privé, nécessite authentification)
+- `public` : Récupère uniquement les dépôts publics
+- `private` : Récupère uniquement les dépôts privés (nécessite authentification)
+
+**Note** : L'authentification est requise pour accéder aux dépôts privés. Si vous n'êtes pas authentifié et que vous utilisez `--repo-type private` ou `--repo-type all` en mode public, le script basculera automatiquement en mode public.
+
+### Option --exclude-forks
+
+Exclut automatiquement les dépôts forké de la récupération. Utile pour :
+
+- Éviter les duplicatas
+- Réduire le temps de clonage
+- Se concentrer sur les dépôts originaux
+
+**Exemple** :
+
+```bash
+# Sans l'option (par défaut, inclus les forks)
+./git-mirror.sh users ZarTek-Creole
+# Résultat : 244 dépôts
+
+# Avec l'option
+./git-mirror.sh --exclude-forks users ZarTek-Creole
+# Résultat : 208 dépôts (40 forks exclus)
+```
+
+### Mode parallèle
+
+Le mode parallèle utilise GNU parallel pour accélérer le clonage. Recommandations :
+
+- **5-10 jobs** : Pour une utilisation normale
+- **10-20 jobs** : Si vous avez une connexion rapide
+- **1 job** : En cas de problèmes de réseau
+
+**Exemple** :
+
+```bash
+./git-mirror.sh --parallel 5 users ZarTek-Creole
+```
+
+### Mode incrémental
+
+Le mode incrémental ne traite que les dépôts modifiés depuis la dernière synchronisation. Il utilise le cache pour stocker le timestamp de la dernière synchronisation.
+
+```bash
+# Première exécution (clone tous les dépôts)
+./git-mirror.sh users ZarTek-Creole
+
+# Exécution suivante (mise à jour seulement les modifiés)
+./git-mirror.sh --incremental users ZarTek-Creole
+```
+
+### Filtres Avancés Combinés
+
+Il est possible de combiner plusieurs filtres pour des synchronisations très précises :
+
+```bash
+# Exclure les forks ET les patterns spécifiques
+./git-mirror.sh --exclude-forks --exclude "old-*" --exclude "deprecated-*" users ZarTek-Creole
+
+# Inclure uniquement les projets spécifiques ET exclure les forks
+./git-mirror.sh --include "project-*" --exclude-forks users ZarTek-Creole
+
+# Combiner type de dépôt, forks et patterns
+./git-mirror.sh --repo-type public --exclude-forks --exclude "test-*" orgs my-org
+
+# Filtres depuis des fichiers
+./git-mirror.sh --include-file important-repos.txt --exclude-file skip-repos.txt users ZarTek-Creole
+```
+
+### Configuration Avancée via Fichiers `.conf`
+
+Le projet inclut 12 fichiers de configuration spécialisés dans `config/` :
+
+- `git-mirror.conf` : Configuration par défaut du script
+- `performance.conf` : Paramètres de performance et parallélisation
+- `security.conf` : Configuration de sécurité
+- `cicd.conf` : Configuration CI/CD
+- `ci.conf` : Configuration d'intégration continue
+- `deployment.conf` : Configuration de déploiement
+- `testing.conf` : Configuration des tests
+- `maintenance.conf` : Configuration de maintenance
+- `dependencies.conf` : Gestion des dépendances
+- `documentation.conf` : Configuration de documentation
+
+Ces fichiers permettent de personnaliser le comportement du script sans modifier le code source.
+
+## Matrice de Compatibilité
+
+| OS | Bash | Git | jq | curl | GNU Parallel | Status |
+|----|------|-----|----|----|-----------|--------|
+| Ubuntu 20.04+ | 5.0+ | 2.25+ | 1.6+ | 7.68+ | Last | ✅ Complet |
+| Debian 11+ | 5.0+ | 2.25+ | 1.6+ | 7.68+ | Last | ✅ Complet |
+| CentOS 8+ | 4.4+ | 2.25+ | 1.6+ | 7.68+ | Last | ✅ Complet |
+| Fedora 34+ | 5.0+ | 2.25+ | 1.6+ | 7.68+ | Last | ✅ Complet |
+| macOS 11+ | 3.2+ | 2.25+ | 1.6+ | 7.64+ | Last | ✅ Complet |
+| Alpine Linux | 5.0+ | 2.25+ | 1.6+ | 7.68+ | Last | ⚠️ Requiert setup |
+
+## Notes importantes
+
+- Le script utilise l'API GitHub pour récupérer la liste des dépôts
+- Par défaut, les forks sont **inclus**. Utilisez `--exclude-forks` pour les exclure
+- Il crée automatiquement le répertoire de destination s'il n'existe pas
+- Il gère les erreurs et continue le traitement même si certains dépôts échouent
+- Le cache API réduit les appels redondants (désactivable avec `--no-cache`)
+- Le script vérifie automatiquement les prérequis avant l'exécution
+
+## Limitations
+
+- Ce script fonctionne uniquement sur les systèmes Unix/Linux/macOS (nécessite bash 4.0+)
+- Il définit un délai d'expiration de 30 secondes par défaut pour les commandes git (configurable via `--timeout`)
+- Le mode parallèle nécessite GNU parallel
+
+## Problèmes courants et solutions
+
+### Erreur "jq command not found"
+
+**Solution** : Installer jq selon votre système d'exploitation :
+
+```bash
+# Ubuntu/Debian
+sudo apt-get update && sudo apt-get install -y jq
+
+# CentOS/RHEL
+sudo yum install -y jq
+
+# macOS
+brew install jq
+```
+
+### Erreur "git command not found"
+
+**Solution** : Installer git selon votre système d'exploitation :
+
+```bash
+# Ubuntu/Debian
+sudo apt-get update && sudo apt-get install -y git
+
+# CentOS/RHEL
+sudo yum install -y git
+
+# macOS
+brew install git
+```
+
+### Erreur "curl command not found"
+
+**Solution** : Installer curl selon votre système d'exploitation :
+
+```bash
+# Ubuntu/Debian
+sudo apt-get update && sudo apt-get install -y curl
+
+# CentOS/RHEL
+sudo yum install -y curl
+
+# macOS
+brew install curl
+```
+
+### Erreur "Permission denied" lors du clonage
+
+**Solution** : Vérifier les permissions et corriger si nécessaire :
+
+```bash
+# Vérifier les permissions du répertoire de destination
+ls -la ./repositories
+
+# Corriger les permissions
+chmod 755 ./repositories
+chown -R $USER:$USER ./repositories
+```
+
+### Erreur "Repository not found"
+
+**Causes possibles** :
+
+- Nom d'utilisateur ou d'organisation incorrect
+- Dépôt privé sans authentification
+- Dépôt supprimé ou déplacé
+
+**Solution** :
+
+```bash
+# Pour les dépôts privés, utiliser l'authentification
+export GITHUB_TOKEN="ghp_xxxxxxxxxxxx"
+./git-mirror.sh users ZarTek-Creole
+
+# Vérifier le nom d'utilisateur sur GitHub
+curl https://api.github.com/users/ZarTek-Creole
+```
+
+### Erreur "API rate limit exceeded"
+
+**Information** :
+
+- Sans token : 60 requêtes/heure (rate limit API publique)
+- Avec token : 5000 requêtes/heure (rate limit API authentifié)
+
+**Solution** :
+
+```bash
+# Configurer un token GitHub
+export GITHUB_TOKEN="ghp_xxxxxxxxxxxx"
+./git-mirror.sh users ZarTek-Creole
+
+# Vérifier votre usage actuel
+curl -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/rate_limit
+```
+
+### Erreur "fatal: destination path already exists"
+
+**Cause** : Un clone précédent a été interrompu
+
+**Solution** : Le script gère automatiquement ce cas depuis v2.0. Si le problème persiste :
+
+```bash
+# Nettoyer manuellement si nécessaire
+rm -rf ./repositories/problematic-repo
+
+# Relancer le script
+./git-mirror.sh users ZarTek-Creole
+```
+
+### Erreur de submodules en mode shallow
+
+**Cause** : Les submodules ne sont pas supportés en mode shallow clonage
+
+**Solution** : Automatiquement géré par le script
+
+```bash
+# Avec --depth, les submodules sont désactivés automatiquement
+./git-mirror.sh --depth 1 users ZarTek-Creole
+
+# Pour activer les submodules, utiliser sans --depth
+./git-mirror.sh users ZarTek-Creole
+```
+
+### Erreur "parallel command not found"
+
+**Cause** : GNU parallel n'est pas installé
+
+**Solution** : Installer GNU parallel :
+
+```bash
+# Ubuntu/Debian
+sudo apt-get install -y parallel
+
+# CentOS/RHEL
+sudo yum install -y parallel
+
+# macOS
+brew install parallel
+```
+
+**Alternative** : Utiliser sans parallélisation (plus lent) :
+
+```bash
+./git-mirror.sh users ZarTek-Creole
+# Ou explicitement
+./git-mirror.sh --parallel 1 users ZarTek-Creole
+```
+
 ## Contributions
-Ce projet est ouvert aux contributions de tous types ! Si vous souhaitez contribuer, voici quelques idées de choses à faire :
 
-### Améliorer la documentation
-- Ajouter de nouvelles fonctionnalités au script
-- Corriger des bugs ou améliorer la stabilité du script
-- Traduire la documentation dans d'autres langues
-- ...
 ### Comment contribuer
-Pour contribuer, voici les étapes à suivre :
 
-- Faites un fork du projet sur votre compte GitHub.
-- Créez une branche pour votre contribution (par exemple, fix-typo-in-readme).
-- Faites vos changements dans votre branche et committez-les.
-- Poussez votre branche sur votre fork du projet.
-- Créez une pull request depuis votre branche vers la branche master du projet principal.
-- N'hésitez pas à nous contacter ou à ouvrir une issue si vous avez des questions ou des idées de contributions !
-
-## Problèmes courants et solutions connues
-Voici quelques problèmes courants que les utilisateurs peuvent rencontrer lors de l'utilisation de ce script et les solutions connues :
-
-- Erreur : "jq: command not found" : Cette erreur signifie que l'outil jq n'est pas installé sur votre ordinateur. Pour résoudre ce problème, veuillez suivre les instructions d'installation dans la section "Dépendances" du README.
-- Erreur : "git: command not found" : Cette erreur signifie que l'outil git n'est pas installé sur votre ordinateur. Pour résoudre ce problème, veuillez suivre les instructions d'installation dans la section "Dépendances" du README.
-- Erreur : "Error: git command took too long to execute" : Cette erreur signifie que la commande git a dépassé le délai d'expiration de 30 secondes. Pour résoudre ce problème, vous pouvez essayer d'augmenter la valeur de timeout dans le script ou exécuter la commande git directement depuis votre terminal pour obtenir plus de détails sur l'erreur.
-- Erreur : "Error: Invalid context" : Cette erreur signifie que le contexte spécifié (utilisateurs ou organisations) n'est pas valide. Veuillez vous assurer que vous avez spécifié "users" ou "orgs" comme premier argument de la ligne de commande.
-- Erreur : "Error: Repository not found" : Cette erreur signifie que le nom d'utilisateur ou d'organisation spécifié n'a pas été trouvé sur GitHub. Veuillez vous assurer que vous avez entré le nom correctement et que l'utilisateur ou l'organisation existe bien sur GitHub.
-- Si vous rencontrez un autre problème qui n'est pas mentionné ci-dessus, veuillez ouvrir une issue sur notre page de dépôt GitHub (https://github.com/ZarTek-Creole/git-mirror/issues) pour obtenir de l'aide. N'hésitez pas à inclure des détails sur l'erreur que vous avez rencontrée et les étapes que vous avez suivies pour reproduire l'erreur. Nous ferons de notre mieux pour vous aider à résoudre le problème le plus rapidement possible.
+1. Fork le projet
+2. Créer une branche pour votre fonctionnalité (`git checkout -b feature/AmazingFeature`)
+3. Commit vos changements (`git commit -m 'Add some AmazingFeature'`)
+4. Push vers la branche (`git push origin feature/AmazingFeature`)
+5. Ouvrir une Pull Request
 
 ## Licence
-Ce projet est sous licence MIT - voir le fichier de licence pour plus de détails.
 
-La licence MIT est une licence de logiciel libre très couramment utilisée. Elle permet à quiconque de librement utiliser, copier, modifier et redistribuer le logiciel, même à des fins commerciales, sous réserve de citer la source et de ne pas utiliser le nom de l'auteur à des fins de promotion.
+Ce projet est sous licence MIT. Voir le fichier [LICENSE](LICENSE) pour plus de détails.
 
-En utilisant ce projet, vous acceptez les termes de la licence MIT et vous vous engagez à respecter ses conditions. Si vous avez des questions sur la licence ou sur les droits qui vous sont accordés en tant qu'utilisateur, n'hésitez pas à nous contacter ou à consulter la documentation de la licence MIT.
+## Auteur
 
-# Donations
-Nous sommes très reconnaissants pour toute contribution à notre projet. Si vous souhaitez soutenir notre travail et aider à financer les développements futurs, vous pouvez faire un don via PayPal ou une autre plateforme de paiement en ligne. Vous trouverez les détails pour faire un don sur notre page de don (https://github.com/ZarTek-Creole/DONATE).
+- **ZarTek-Creole** - *Travail initial* - [GitHub](https://github.com/ZarTek-Creole)
 
-Le développement open source est crucial pour l'innovation et la croissance de l'industrie de la technologie. En faisant un don, vous pouvez contribuer à la vitalité de l'écosystème open source et soutenir les développeurs qui travaillent dur pour créer des outils utiles et innovants.
+## Donations
 
-Nous sommes reconnaissants pour tout soutien, qu'il soit financier ou en termes de temps et de compétences. Votre contribution est précieuse pour nous et nous espérons que nos projets continueront à grandir grâce à votre soutien. Nous vous remercions de votre générosité et de votre soutien à notre projet !
+Si ce projet vous a aidé et que vous souhaitez le soutenir, vous pouvez faire un don via les plateformes suivantes :
 
-Voici comment vous pouvez faire un don à notre projet via https://ko-fi.com/zartek :
+- **GitHub Sponsors** : [Soutenir sur GitHub](https://github.com/sponsors/ZarTek-Creole)
+- **Ko-fi** : [Faire un don sur Ko-fi](https://ko-fi.com/zartek)
 
-- Visitez la page de don https://ko-fi.com/zartek
-- Cliquez sur le bouton "Donate"
-- Entrez le montant que vous souhaitez donner dans le champ "Amount" et sélectionnez votre devise
-- Si vous avez un compte Ko-fi, connectez-vous pour continuer. Si vous n'avez pas de compte, vous pouvez vous en créer un ou continuer en tant qu'invité
-- Sélectionnez votre méthode de paiement (PayPal, carte de crédit ou autre) et suivez les instructions pour finaliser votre don
-- Nous sommes reconnaissants pour toute contribution et nous espérons que notre projet continuera à grandir grâce à votre soutien. ***Merci de votre générosité !***
+Votre soutien est grandement apprécié et aide à continuer à développer et améliorer ce projet !
+
+---
+
+**Note** : Ce script est fourni tel quel, sans garantie. Utilisez-le à vos propres risques.

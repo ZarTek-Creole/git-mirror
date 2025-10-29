@@ -1,0 +1,147 @@
+name: Reusable Test Suite
+
+on:
+  workflow_call:
+    inputs:
+      test_type:
+        required: false
+        type: string
+        default: 'all'
+        description: 'Type of tests to run: all, unit, integration, e2e'
+      test_os:
+        required: false
+        type: string
+        default: 'ubuntu-latest'
+      enable_coverage:
+        required: false
+        type: boolean
+        default: false
+      parallel_jobs:
+        required: false
+        type: number
+        default: 4
+
+jobs:
+  test-suite:
+    name: Run ${{ inputs.test_type }} tests on ${{ inputs.test_os }}
+    runs-on: ${{ inputs.test_os }}
+    timeout-minutes: 25
+
+    strategy:
+      fail-fast: false
+      max-parallel: ${{ inputs.parallel_jobs }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Bash environment
+        uses: ./.github/actions/setup-bash-environment
+        with:
+          install_shellcheck: false
+          install_bats: true
+          install_parallel: true
+
+      - name: Composite cache for dependencies
+        uses: actions/cache@v4
+        id: composite-cache
+        with:
+          path: |
+            ~/.npm-global
+            ~/.cache/bats
+            ~/.cache/test-results
+            ~/.local/share/shellspec
+          key: ${{ runner.os }}-test-${{ hashFiles('**/*.sh', 'tests/**/*') }}
+          restore-keys: |
+            ${{ runner.os }}-test-
+
+      - name: Setup ShellSpec
+        if: inputs.test_type == 'all' || inputs.test_type == 'e2e'
+        run: |
+          if [ ! -f bin/shellspec ]; then
+            curl -fsSL https://git.io/shellspec | sh -s -- --yes
+          fi
+          echo "$PWD/bin" >> $GITHUB_PATH
+
+      - name: Run unit tests
+        if: inputs.test_type == 'all' || inputs.test_type == 'unit'
+        continue-on-error: false
+        timeout-minutes: 10
+        run: |
+          echo "=== Running Unit Tests ==="
+          bats tests/unit/ || exit 1
+          echo "✅ Unit tests passed"
+
+      - name: Run integration tests
+        if: inputs.test_type == 'all' || inputs.test_type == 'integration'
+        continue-on-error: false
+        timeout-minutes: 12
+        run: |
+          echo "=== Running Integration Tests ==="
+          bash tests/integration/test_integration.sh || exit 1
+          echo "✅ Integration tests passed"
+
+      - name: Run ShellSpec tests
+        if: inputs.test_type == 'all' || inputs.test_type == 'e2e'
+        continue-on-error: false
+        timeout-minutes: 15
+        run: |
+          echo "=== Running ShellSpec E2E Tests ==="
+          shellspec tests/spec/ || exit 1
+          echo "✅ ShellSpec tests passed"
+
+      - name: Run load tests
+        if: inputs.test_type == 'all' || inputs.test_type == 'e2e'
+        continue-on-error: true
+        timeout-minutes: 10
+        run: |
+          if [ -f tests/load/test_load.sh ]; then
+            echo "=== Running Load Tests ==="
+            bash tests/load/test_load.sh --dry-run --repos 20 --parallel 3
+            echo "✅ Load tests completed"
+          else
+            echo "⚠️ Load tests not found, skipping"
+          fi
+
+      - name: Generate coverage report
+        if: inputs.enable_coverage && runner.os == 'Linux'
+        run: |
+          echo "=== Generating Coverage Report ==="
+          mkdir -p coverage
+          # Placeholder for coverage generation
+          echo "Coverage generation would happen here"
+
+      - name: Upload coverage to Codecov
+        if: inputs.enable_coverage && runner.os == 'Linux' && always()
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage/report.json
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+          verbose: true
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ inputs.test_type }}-${{ runner.os }}
+          path: |
+            test-results/
+            coverage/
+            result/
+          compression-level: 9
+          retention-days: 90
+          if-no-files-found: ignore
+
+      - name: Test suite summary
+        if: always()
+        run: |
+          echo "=== Test Suite Summary ==="
+          echo "Test Type: ${{ inputs.test_type }}"
+          echo "OS: ${{ runner.os }}"
+          echo "Coverage Enabled: ${{ inputs.enable_coverage }}"
+          echo ""
+          echo "✅ Test suite execution completed"
+
