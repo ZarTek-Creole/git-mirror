@@ -96,7 +96,7 @@ jobs:
           echo "Security Scan: ${{ needs.security.result }}"
           echo "Test Suite: ${{ needs.test.result }}"
           echo ""
-          
+
           if [[ "${{ needs.quality.result }}" == "success" ]] && \
              [[ "${{ needs.security.result }}" == "success" ]] && \
              [[ "${{ needs.test.result }}" == "success" ]]; then
@@ -106,4 +106,3 @@ jobs:
             echo "❌ CI pipeline failed"
             exit 1
           fi
-

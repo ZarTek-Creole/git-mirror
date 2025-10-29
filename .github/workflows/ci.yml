@@ -48,14 +48,14 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-    
+
     - name: Setup Bash environment
       uses: ./.github/actions/setup-bash-environment
       with:
         install_shellcheck: true
         install_bats: true
         install_parallel: true
-    
+
     - name: Cache dependencies
       uses: actions/cache@v4
       with:
@@ -65,21 +65,21 @@ jobs:
         key: ${{ runner.os }}-ci-deps-${{ hashFiles('**/*.sh') }}
         restore-keys: |
           ${{ runner.os }}-ci-deps-
-    
+
     - name: Run shellcheck
       continue-on-error: false
       run: shellcheck git-mirror.sh lib/*/*.sh config/*.sh
-    
+
     - name: Run unit tests
       continue-on-error: false
       timeout-minutes: 10
       run: bats tests/unit/
-    
+
     - name: Run integration tests
       continue-on-error: false
       timeout-minutes: 12
       run: bash tests/integration/test_integration.sh
-    
+
     - name: Run load tests
       continue-on-error: true
       timeout-minutes: 10
@@ -89,7 +89,7 @@ jobs:
         else
           echo "⚠️ Load tests not found, skipping"
         fi
-    
+
     - name: Upload test results
       if: always()
       uses: actions/upload-artifact@v4
@@ -98,7 +98,7 @@ jobs:
         path: test-results/
         retention-days: 90
         compression-level: 9
-    
+
     - name: Upload logs
       if: always()
       uses: actions/upload-artifact@v4
