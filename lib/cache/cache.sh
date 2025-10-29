@@ -326,4 +326,7 @@ cache_setup() {
 }
 
 # Export des fonctions publiques
-export -f init_cache cache_get cache_set cache_delete cache_exists cache_get_total_repos cache_set_total_repos cache_get_last_sync cache_set_last_sync cache_get_state cache_set_state cache_clear get_cache_stats cache_verify cache_setup
+export -f init_cache cache_get cache_set cache_delete cache_exists \
+  cache_get_total_repos cache_set_total_repos cache_get_last_sync \
+  cache_set_last_sync cache_get_state cache_set_state cache_clear \
+  get_cache_stats cache_verify cache_setup

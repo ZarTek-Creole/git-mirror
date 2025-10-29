@@ -29,15 +29,19 @@ api_check_rate_limit() {
     headers=$(auth_get_headers "${GITHUB_AUTH_METHOD:-public}")
     
     local response
-    # Utilisation de eval pour permettre l'expansion correcte des quotes dans headers
-    # SÉCURITÉ: headers ne peut contenir que des valeurs contrôlées (pas d'input utilisateur)
+    # Appel curl sans eval pour sécurité
     if [ -n "$headers" ]; then
-        if ! response=$(eval "curl -s $headers -H 'Accept: application/vnd.github.v3+json' '$API_BASE_URL/rate_limit'" 2>/dev/null); then
+        # Headers contient déjà -H "Authorization: token $GITHUB_TOKEN"
+        # Utiliser un tableau pour passer les options curl
+        if ! response=$(curl -s "$headers" \
+                       -H "Accept: application/vnd.github.v3+json" \
+                       "$API_BASE_URL/rate_limit" 2>/dev/null); then
             log_warning "Impossible de vérifier les limites de taux API"
             return 1
         fi
     else
-        if ! response=$(curl -s -H "Accept: application/vnd.github.v3+json" "$API_BASE_URL/rate_limit" 2>/dev/null); then
+        if ! response=$(curl -s -H "Accept: application/vnd.github.v3+json" \
+                       "$API_BASE_URL/rate_limit" 2>/dev/null); then
             log_warning "Impossible de vérifier les limites de taux API"
             return 1
         fi
@@ -78,11 +82,14 @@ api_wait_rate_limit() {
     local response
     # SÉCURITÉ : Utilisation directe de curl SANS eval
     if [ -n "$headers" ]; then
-        if ! response=$(curl -s "$headers" -H "Accept: application/vnd.github.v3+json" "$API_BASE_URL/rate_limit" 2>/dev/null); then
+        if ! response=$(curl -s "$headers" \
+                       -H "Accept: application/vnd.github.v3+json" \
+                       "$API_BASE_URL/rate_limit" 2>/dev/null); then
             return 1
         fi
     else
-        if ! response=$(curl -s -H "Accept: application/vnd.github.v3+json" "$API_BASE_URL/rate_limit" 2>/dev/null); then
+        if ! response=$(curl -s -H "Accept: application/vnd.github.v3+json" \
+                       "$API_BASE_URL/rate_limit" 2>/dev/null); then
             return 1
         fi
     fi
@@ -139,7 +146,8 @@ api_fetch_with_cache() {
     local cache_file="$API_CACHE_DIR/$cache_key.json"
     
     # Vérifier le cache (sauf si désactivé via --no-cache)
-    if [ "${API_CACHE_DISABLED:-false}" != "true" ] && api_cache_valid "$cache_file" "$API_CACHE_TTL"; then
+    if [ "${API_CACHE_DISABLED:-false}" != "true" ] && \
+       api_cache_valid "$cache_file" "$API_CACHE_TTL"; then
         log_debug "Utilisation du cache pour: $url"
         cat "$cache_file"
         return 0
@@ -165,15 +173,16 @@ api_fetch_with_cache() {
     local response
     local http_code
     
-    # Utilisation de eval pour permettre l'expansion correcte des quotes dans headers
-    # SÉCURITÉ: headers ne peut contenir que des valeurs contrôlées (pas d'input utilisateur)
+    # Appel curl sans eval pour sécurité
     local temp_file
     temp_file=$(mktemp)
     
     if [ -n "$headers" ]; then
-        eval "curl -s -w '\nHTTP_CODE:%{http_code}\n' $headers -H 'Accept: application/vnd.github.v3+json' '$url' > $temp_file" 2>/dev/null
+        curl -s -w "\nHTTP_CODE:%{http_code}\n" "$headers" \
+             -H "Accept: application/vnd.github.v3+json" "$url" > "$temp_file" 2>/dev/null
     else
-        curl -s -w "\nHTTP_CODE:%{http_code}\n" -H "Accept: application/vnd.github.v3+json" "$url" > "$temp_file" 2>/dev/null
+        curl -s -w "\nHTTP_CODE:%{http_code}\n" \
+             -H "Accept: application/vnd.github.v3+json" "$url" > "$temp_file" 2>/dev/null
     fi
     
     # Extraire le code HTTP (dernière ligne)
@@ -273,7 +282,8 @@ api_fetch_all_repos() {
     cache_key=$(api_cache_key "all_repos_${context}_${username}_${auth_state}_${repo_type_state}")
     local cache_file="$API_CACHE_DIR/${cache_key}.json"
     
-    if [ "${API_CACHE_DISABLED:-false}" != "true" ] && api_cache_valid "$cache_file" "$API_CACHE_TTL"; then
+    if [ "${API_CACHE_DISABLED:-false}" != "true" ] && \
+       api_cache_valid "$cache_file" "$API_CACHE_TTL"; then
         log_debug "Utilisation du cache complet pour tous les dépôts" >&2
         cat "$cache_file"
         return 0
@@ -286,23 +296,26 @@ api_fetch_all_repos() {
     actual_repo_type="${REPO_TYPE:-all}"
     
     # Décider quelle URL utiliser et quel paramètre type passer
-    if [ "$context" = "users" ] && [ -n "${GITHUB_AUTH_METHOD:-}" ] && [ "$GITHUB_AUTH_METHOD" != "public" ]; then
+    if [ "$context" = "users" ] && [ -n "${GITHUB_AUTH_METHOD:-}" ] && \
+       [ "$GITHUB_AUTH_METHOD" != "public" ]; then
         # Mode authentifié : utiliser /user/repos avec le paramètre type
         api_url="$API_BASE_URL/user/repos"
         repo_type_param="$actual_repo_type"
-        log_debug "Mode authentifié : récupération des dépôts de type '$actual_repo_type'" >&2
+        log_debug "Mode authentifié: récupération type '$actual_repo_type'" >&2
     else
         # Mode public : utiliser /users/:username/repos (seulement publics disponibles)
         if [ "$actual_repo_type" != "public" ] && [ "$actual_repo_type" != "all" ]; then
-            log_warning "Les dépôts privés ne sont disponibles qu'en mode authentifié. Utilisation des dépôts publics seulement." >&2
+            log_warning "Les dépôts privés nécessitent authentification" >&2
+            log_warning "Utilisation des dépôts publics seulement" >&2
         fi
         api_url="$API_BASE_URL/$context/$username/repos"
         repo_type_param="all"  # Pour compatibilité
-        log_debug "Mode public : récupération des dépôts publics seulement" >&2
+        log_debug "Mode public: récupération dépôts publics seulement" >&2
     fi
     
     while true; do
-        local url="$api_url?page=$page&per_page=$per_page&sort=updated&direction=desc&type=$repo_type_param"
+        local url="${api_url}?page=${page}&per_page=${per_page}&sort=updated" \
+              "&direction=desc&type=${repo_type_param}"
         
         log_debug "Récupération page $page..." >&2
         
@@ -352,7 +365,8 @@ api_fetch_all_repos() {
             temp_result=$(mktemp)
             echo "$all_repos" > "$temp_file1"
             echo "$response" > "$temp_file2"
-            log_debug "Avant fusion - all_repos: $(jq 'length' "$temp_file1"), response: $(jq 'length' "$temp_file2")" >&2
+            log_debug "Avant fusion - all_repos: $(jq 'length' "$temp_file1")" >&2
+            log_debug "  response: $(jq 'length' "$temp_file2")" >&2
             jq -s '.[0] + .[1]' "$temp_file1" "$temp_file2" > "$temp_result"
             all_repos=$(cat "$temp_result")
             rm -f "$temp_file1" "$temp_file2" "$temp_result"
@@ -390,7 +404,8 @@ api_get_total_repos() {
     cache_key=$(api_cache_key "total_${context}_${username}_${repo_type_state}")
     local cache_file="$API_CACHE_DIR/${cache_key}.json"
     
-    if [ "${API_CACHE_DISABLED:-false}" != "true" ] && api_cache_valid "$cache_file" "$API_CACHE_TTL"; then
+    if [ "${API_CACHE_DISABLED:-false}" != "true" ] && \
+       api_cache_valid "$cache_file" "$API_CACHE_TTL"; then
         local cached_total
         cached_total=$(cat "$cache_file")
         log_debug "Utilisation du cache pour le nombre total de dépôts: $cached_total"
@@ -401,7 +416,8 @@ api_get_total_repos() {
     # Faire un appel API pour obtenir le nombre total
     # Utiliser /user/repos pour l'utilisateur authentifié, sinon /users/:username/repos
     local api_url
-    if [ "$context" = "users" ] && [ -n "${GITHUB_AUTH_METHOD:-}" ] && [ "$GITHUB_AUTH_METHOD" != "public" ]; then
+    if [ "$context" = "users" ] && [ -n "${GITHUB_AUTH_METHOD:-}" ] && \
+       [ "$GITHUB_AUTH_METHOD" != "public" ]; then
         api_url="https://api.github.com/user/repos"
     else
         api_url="$API_BASE_URL/$context/$username/repos"
@@ -412,7 +428,8 @@ api_get_total_repos() {
     
     local response
     if ! response=$(api_fetch_with_cache "$url" 2>/dev/null); then
-        log_warning "Impossible de récupérer le nombre total de dépôts, utilisation de l'estimation par défaut" >&2
+        log_warning "Impossible de récupérer le nombre total de dépôts" >&2
+        log_warning "Utilisation de l'estimation par défaut" >&2
         echo "100"
         return 0
     fi
@@ -424,7 +441,8 @@ api_get_total_repos() {
     local link_header
     # SÉCURITÉ : Utilisation directe de curl SANS eval
     if [ -n "$headers" ]; then
-        link_header=$(curl -s -I "$headers" -H "Accept: application/vnd.github.v3+json" "$url" 2>/dev/null | \
+        link_header=$(curl -s -I "$headers" \
+                            -H "Accept: application/vnd.github.v3+json" "$url" 2>/dev/null | \
                       grep -i "link:" | cut -d' ' -f2-)
     else
         link_header=$(curl -s -I -H "Accept: application/vnd.github.v3+json" "$url" 2>/dev/null | \

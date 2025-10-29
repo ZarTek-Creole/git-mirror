@@ -1,5 +1,29 @@
 # Git Mirror
 
+[![CI Status](https://github.com/ZarTek-Creole/git-mirror/workflows/CI/badge.svg)](https://github.com/ZarTek-Creole/git-mirror/actions)
+[![ShellCheck](https://img.shields.io/badge/shellcheck-passed-brightgreen)](https://www.shellcheck.net/)
+[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![Bash](https://img.shields.io/badge/bash-4.4%2B-green)](https://www.gnu.org/software/bash/)
+[![Version](https://img.shields.io/badge/version-2.5.0-orange)](CHANGELOG.md)
+
+## Table des Matières
+
+- [Résumé](#résumé)
+- [Description](#description)
+- [Caractéristiques principales](#caractéristiques-principales)
+- [Dépendances & Prérequis](#dépendances--prérequis)
+- [Utilisation](#utilisation)
+- [Architecture du Projet](#architecture-du-projet)
+- [Documentation](#documentation)
+- [Matrice de Compatibilité](#matrice-de-compatibilité)
+- [Notes importantes](#notes-importantes)
+- [Limitations](#limitations)
+- [Problèmes courants et solutions](#problèmes-courants-et-solutions)
+- [Contributions](#contributions)
+- [Licence](#licence)
+- [Auteur](#auteur)
+- [Donations](#donations)
+
 ## Résumé
 
 Git Mirror est un script avancé permettant de cloner ou mettre à jour tous les dépôts GitHub d'un utilisateur ou d'une organisation. Il supporte l'authentification, le traitement parallèle, les filtres, et offre une large gamme d'options de configuration.
@@ -47,6 +71,20 @@ Pour utiliser ce script, vous devez avoir les outils suivants installés sur vot
   - Ubuntu/Debian : `sudo apt-get install parallel`
   - CentOS/Fedora : `sudo yum install parallel`
   - MacOS : `brew install parallel`
+
+## Installation Rapide
+
+```bash
+# Cloner le dépôt
+git clone https://github.com/ZarTek-Creole/git-mirror.git
+cd git-mirror
+
+# Rendre le script exécutable
+chmod +x git-mirror.sh
+
+# Vérifier les dépendances
+./git-mirror.sh --help
+```
 
 ## Utilisation
 

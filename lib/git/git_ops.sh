@@ -71,8 +71,8 @@ clone_repository() {
     
     log_info "Clonage du dépôt: $repo_name dans $full_dest_path"
     
-    # CRITIQUE: Créer le répertoire parent AVANT le clonage pour éviter race conditions en parallèle
-    # Univocité avec retry pour gérer les créations concurrentes
+    # CRITIQUE: Créer répertoire parent avant clonage
+    # Éviter race conditions en mode parallèle avec retry
     local retries=0
     while [ $retries -lt 5 ] && [ ! -d "$absolute_dest_dir" ]; do
         mkdir -p "$absolute_dest_dir" 2>/dev/null || true
@@ -80,15 +80,18 @@ clone_repository() {
         sleep 0.1
     done
     
-    # NETTOYER le répertoire de destination s'il existe et est corrompu (clone partiel en parallèle)
+    # NETTOYER le répertoire de destination s'il existe et est corrompu
+    # (gestion des clones partiels en mode parallèle)
     if [ -d "$full_dest_path" ]; then
         # Si le répertoire existe mais n'est pas un dépôt Git valide, le nettoyer
         if [ ! -d "$full_dest_path/.git" ]; then
-            log_warning "Répertoire $repo_name existe mais n'est pas un dépôt Git valide, nettoyage..."
+            log_warning "Répertoire $repo_name existe mais n'est pas un dépôt Git valide"
+            log_warning "Nettoyage en cours..."
             rm -rf "$full_dest_path"
-        # Si c'est un dépôt Git mais incomplet (erreur précédente), le considérer comme existant
+        # Si c'est un dépôt Git mais incomplet (erreur précédente)
         elif [ -d "$full_dest_path/.git" ] && [ ! -f "$full_dest_path/.git/HEAD" ]; then
-            log_warning "Dépôt $repo_name semble incomplet, nettoyage..."
+            log_warning "Dépôt $repo_name semble incomplet"
+            log_warning "Nettoyage en cours..."
             rm -rf "$full_dest_path"
         else
             # C'est un vrai dépôt Git, retourner succès
@@ -246,8 +249,13 @@ _update_branch() {
             log_debug "Création de la branche locale: $target_branch"
             git checkout -b "$target_branch" "origin/$target_branch" || return 1
         else
-            log_warning "Branche $target_branch non trouvée, utilisation de la branche par défaut"
-            git checkout "$(git symbolic-ref refs/remotes/origin/HEAD | sed 's@^refs/remotes/origin/@@')" || return 1
+            log_warning "Branche $target_branch non trouvée"
+            log_warning "Utilisation de la branche par défaut"
+            local default_branch_ref
+            default_branch_ref=$(git symbolic-ref refs/remotes/origin/HEAD)
+            local default_branch
+            default_branch=$(echo "$default_branch_ref" | sed 's@^refs/remotes/origin/@@')
+            git checkout "$default_branch" || return 1
         fi
     fi
 }
@@ -301,7 +309,8 @@ _execute_git_command() {
             retry_count=$((retry_count + 1))
             
             if [ $retry_count -lt "$max_retries" ]; then
-                log_warning "Tentative $retry_count/$max_retries échouée pour $operation, retry dans ${retry_delay}s..."
+                log_warning "Tentative $retry_count/$max_retries échouée pour $operation"
+                log_warning "Retry dans ${retry_delay}s..."
                 sleep "$retry_delay"
             else
                 log_error "Échec définitif après $max_retries tentatives pour $operation"
@@ -438,4 +447,7 @@ git_ops_setup() {
 }
 
 # Export des fonctions publiques
-export -f init_git_module clone_repository update_repository repository_exists get_current_branch get_last_commit clean_corrupted_repository get_git_stats git_ops_setup _execute_git_command _configure_safe_directory _handle_git_error _update_submodules _update_branch
+export -f init_git_module clone_repository update_repository repository_exists \
+  get_current_branch get_last_commit clean_corrupted_repository get_git_stats \
+  git_ops_setup _execute_git_command _configure_safe_directory _handle_git_error \
+  _update_submodules _update_branch

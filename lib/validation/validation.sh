@@ -21,7 +21,7 @@ readonly VALIDATION_MODULE_LOADED="true"
 # Obtenir les informations du module validation
 get_validation_module_info() {
     echo "Module: $VALIDATION_MODULE_NAME v$VALIDATION_VERSION"
-    echo "Fonctions de validation disponibles: context, destination, branch, filter, depth, parallel_jobs, timeout"
+    echo "Functions: context, destination, branch, filter, depth, parallel_jobs, timeout"
 }
 
 # Interface publique du module Validation (Facade Pattern)
@@ -58,7 +58,9 @@ validate_username() {
     fi
     
     # Vérifier les caractères autorisés (alphanumériques et tirets)
-    if ! [[ "$username" =~ ^[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9]$ ]] && ! [[ "$username" =~ ^[a-zA-Z0-9]$ ]]; then
+    local username_pattern="^[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9]$"
+    local short_pattern="^[a-zA-Z0-9]$"
+    if ! [[ "$username" =~ $username_pattern ]] && ! [[ "$username" =~ $short_pattern ]]; then
         return 1
     fi
     
@@ -121,10 +123,21 @@ validate_branch() {
         return 1
     fi
     
-    # Vérifier les caractères interdits
-    if [[ "$branch" =~ [~^:\[\]\\] ]] || [[ "$branch" =~ \.\. ]] || [[ "$branch" =~ @\{ ]]; then
+    # Vérifier les caractères interdits Git
+    # Vérifier ".." pour path traversal
+    if [[ "$branch" =~ \.\. ]]; then
         return 1
     fi
+    # Vérifier '@{' pour ref ambiguity
+    if [[ "$branch" =~ @\{ ]]; then
+        return 1
+    fi
+    # Vérifier caractères spéciaux ~ ^ : [ ] \
+    case "$branch" in
+        *~*|*\^*|*:*|*\[*|*\]*|*\\*)
+            return 1
+            ;;
+    esac
     
     # Vérifier qu'il ne se termine pas par un point
     if [[ "$branch" =~ \.$ ]]; then
@@ -217,7 +230,9 @@ validate_github_url() {
     local url="$1"
     
     # Vérifier le format de l'URL GitHub
-    if [[ "$url" =~ ^https://github\.com/[^/]+/[^/]+\.git$ ]] || [[ "$url" =~ ^git@github\.com:[^/]+/[^/]+\.git$ ]]; then
+    local https_pattern="^https://github\.com/[^/]+/[^/]+\.git$"
+    local ssh_pattern="^git@github\.com:[^/]+/[^/]+\.git$"
+    if [[ "$url" =~ $https_pattern ]] || [[ "$url" =~ $ssh_pattern ]]; then
         return 0
     else
         log_error "URL GitHub invalide: $url"
@@ -281,7 +296,9 @@ validate_all_params() {
     
     # Debug des paramètres reçus
     if command -v log_debug >/dev/null 2>&1; then
-        log_debug "Validation des paramètres: context=$context, username=$username, dest_dir=$dest_dir, branch=$branch, filter=$filter, depth=$depth, parallel_jobs=$parallel_jobs, timeout=$timeout"
+        log_debug "Validation params: context=$context, username=$username"
+        log_debug "  dest_dir=$dest_dir, branch=$branch, filter=$filter"
+        log_debug "  depth=$depth, parallel_jobs=$parallel_jobs, timeout=$timeout"
     fi
     
     # Valider chaque paramètre avec messages d'erreur explicites
@@ -291,22 +308,27 @@ validate_all_params() {
     fi
     
     if ! validate_username "$username"; then
-        log_error "Username invalide: '$username' (format: alphanumérique+tirets, max 39 caractères)"
+        log_error "Username invalide: '$username'"
+        log_error "  Format attendu: alphanumérique+tirets, max 39 chars"
         validation_failed=true
     fi
     
     if ! validate_destination "$dest_dir"; then
-        log_error "Répertoire de destination invalide: '$dest_dir' (vérifier existence et permissions)"
+        log_error "Répertoire de destination invalide: '$dest_dir'"
+        log_error "  Vérifier existence et permissions"
         validation_failed=true
     fi
     
     if ! validate_branch "$branch"; then
-        log_error "Nom de branche invalide: '$branch' (caractères interdits: ~ ^ : [ ] \\ .. @{ et ne doit pas finir par .)"
+        log_error "Nom de branche invalide: '$branch'"
+        log_error "  Caractères interdits: ~ ^ : [ ] \\ .. @{"
+        log_error "  Ne doit pas finir par ."
         validation_failed=true
     fi
     
     if ! validate_filter "$filter"; then
-        log_error "Filtre Git invalide: '$filter' (formats acceptés: blob:none, tree:0, sparse:oid=*)"
+        log_error "Filtre Git invalide: '$filter'"
+        log_error "  Formats acceptés: blob:none, tree:0, sparse:oid=*"
         validation_failed=true
     fi
     
@@ -340,4 +362,8 @@ validate_setup() {
 }
 
 # Export des fonctions publiques
-export -f init_validation validate_context validate_username validate_destination validate_branch validate_filter validate_depth validate_parallel_jobs validate_timeout validate_github_url validate_file_permissions validate_dir_permissions validate_all_params validate_setup
+export -f init_validation validate_context validate_username \
+  validate_destination validate_branch validate_filter validate_depth \
+  validate_parallel_jobs validate_timeout validate_github_url \
+  validate_file_permissions validate_dir_permissions validate_all_params \
+  validate_setup

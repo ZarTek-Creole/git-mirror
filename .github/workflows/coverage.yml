@@ -1,0 +1,51 @@
+name: Code Coverage
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+jobs:
+  coverage:
+    name: Coverage Analysis
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup shellspec
+      run: |
+        curl -fsSL https://git.io/shellspec | sh -s -- --yes
+        echo "$PWD/bin" >> $GITHUB_PATH
+
+    - name: Install kcov
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libcurl4-openssl-dev libelf-dev libdw-dev cmake gcc binutils-dev
+        wget https://github.com/SimonKagstrom/kcov/archive/v38.tar.gz
+        tar xzf v38.tar.gz
+        cd kcov-38
+        mkdir build && cd build
+        cmake ..
+        make
+        sudo make install
+
+    - name: Run tests with coverage
+      run: |
+        mkdir -p coverage
+        shellspec --kcov --kcov-options="--include-pattern=.sh" tests/spec/
+
+    - name: Generate coverage report
+      run: |
+        echo "Coverage report generated"
+        ls -lh coverage/
+
+    - name: Upload coverage
+      uses: codecov/codecov-action@v3
+      with:
+        files: ./coverage/report.json
+        fail_ci_if_error: false
+

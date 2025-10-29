@@ -1,0 +1,4 @@
+lib/auth/auth.sh:38:32: warning: Declare and assign separately to avoid masking return values. [SC2155]
+lib/auth/auth.sh:63:24: warning: Declare and assign separately to avoid masking return values. [SC2155]
+lib/auth/auth.sh:117:20: warning: Declare and assign separately to avoid masking return values. [SC2155]
+lib/utils/profiling.sh:43:15: warning: Quote arguments to unset so they're not glob expanded. [SC2184]

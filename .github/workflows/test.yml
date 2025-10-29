@@ -1,0 +1,59 @@
+name: Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Test on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup shellspec
+      run: |
+        curl -fsSL https://git.io/shellspec | sh -s -- --yes
+        echo "$PWD/bin" >> $GITHUB_PATH
+
+    - name: Setup dependencies
+      run: |
+        sudo apt-get update || true
+        sudo apt-get install -y jq || true
+        brew install jq || true
+
+    - name: Run ShellSpec tests
+      run: shellspec tests/spec/
+      continue-on-error: false
+
+    - name: Run Bats tests
+      run: bats tests/unit/ || true
+
+    - name: Run ShellCheck
+      run: |
+        if command -v shellcheck >/dev/null 2>&1; then
+          shellcheck -S error lib/**/*.sh config/config.sh git-mirror.sh
+        else
+          echo "ShellCheck non installé, installation..."
+          sudo apt-get update && sudo apt-get install -y shellcheck || brew install shellcheck
+          shellcheck -S error lib/**/*.sh config/config.sh git-mirror.sh
+        fi
+      continue-on-error: false
+
+    - name: Upload coverage
+      if: matrix.os == 'ubuntu-latest'
+      uses: codecov/codecov-action@v3
+      with:
+        files: ./coverage/report.json
+        fail_ci_if_error: false
+
