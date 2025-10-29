@@ -1,0 +1,33 @@
+# hooks.conf.example - Configuration des hooks pour git-mirror
+# Description: Définit les hooks à exécuter après chaque action
+
+# Copiez ce fichier vers hooks.conf et personnalisez-le selon vos besoins
+# Les hooks sont exécutés dans l'ordre défini ci-dessous
+
+# HOOKS POST-CLONE: Exécutés après un clonage réussi
+# Format: POST_CLONE=/chemin/vers/hook.sh
+# Le hook reçoit 3 arguments: REPO_NAME, REPO_PATH, REPO_URL
+
+POST_CLONE=hooks/example_post_clone.sh
+# POST_CLONE=hooks/custom_install_deps.sh
+# POST_CLONE=hooks/custom_run_tests.sh
+
+# HOOKS POST-UPDATE: Exécutés après une mise à jour réussie d'un dépôt existant
+# Format: POST_UPDATE=/chemin/vers/hook.sh
+# Le hook reçoit 3 arguments: REPO_NAME, REPO_PATH, REPO_URL
+
+POST_UPDATE=hooks/example_post_update.sh
+# POST_UPDATE=hooks/custom_sync_backup.sh
+# POST_UPDATE=hooks/custom_index_update.sh
+
+# HOOKS ON-ERROR: Exécutés lorsqu'un dépôt échoue
+# Format: ON_ERROR=/chemin/vers/hook.sh
+# Le hook reçoit 4 arguments: REPO_NAME, REPO_PATH, REPO_URL, ERROR_MSG
+
+ON_ERROR=hooks/example_on_error.sh
+# ON_ERROR=hooks/custom_alert_admin.sh
+# ON_ERROR=hooks/custom_retry_later.sh
+
+# Note: Les hooks peuvent être commentés avec # pour les désactiver
+# Les hooks sont non-bloquants: un échec n'interrompt pas git-mirror
+

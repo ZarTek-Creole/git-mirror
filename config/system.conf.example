@@ -1,0 +1,112 @@
+# system.conf.example - Configuration des optimisations système
+# Description: Contrôle fin des ressources système et performances
+
+# Copiez ce fichier vers system.conf et personnalisez-le selon votre infrastructure
+
+# =====================================================
+# GESTION DES RESSOURCES SYSTÈME
+# =====================================================
+
+# Activer les limites de ressources (ulimit, nice, ionice)
+# Valeurs: true, false
+SYSTEM_RESOURCE_LIMITS=false
+
+# Priorité CPU (nice)
+# Valeur: 0-19 (19 = plus faible priorité, moins intrusif)
+# Recommandé: 10 pour git-mirror (n'interfère pas trop avec autres processus)
+NICE_PRIORITY=10
+
+# Priorité I/O (ionice)
+# Classe: 1=RT (Real-Time), 2=BE (Best Effort), 3=Idle
+# Niveau: 0-7 (0 = priorité la plus élevée, 7 = la plus faible)
+# Recommandé: 2:4 pour git-mirror (Best Effort, priorité moyenne)
+IONICE_CLASS=2
+IONICE_LEVEL=4
+
+# =====================================================
+# OPTIMISATION RÉSEAU
+# =====================================================
+
+# Activer la compression réseau SSH
+# Réduit la bande passante utilisée (Utile pour connexions lentes)
+# Valeurs: true, false
+NETWORK_COMPRESSION=true
+
+# Niveau de compression SSH
+# Valeur: 1-9 (9 = compression maximale)
+# Recommandé: 6 (bon compromis entre compression et CPU)
+SSH_COMPRESSION_LEVEL=6
+
+# =====================================================
+# PARALLÉLISATION ADAPTATIVE
+# =====================================================
+
+# Activer le tuning automatique des jobs parallèles
+# Adapte dynamiquement le nombre de jobs selon CPU/réseau
+# Valeurs: true, false
+PARALLEL_AUTO_TUNE=true
+
+# Nombre minimum de jobs parallèles
+# Valeur: >= 1
+PARALLEL_MIN_JOBS=1
+
+# Nombre maximum de jobs parallèles
+# Valeur: >= 1
+# Attention: Trop de jobs peuvent surcharger le système
+PARALLEL_MAX_JOBS=50
+
+# =====================================================
+# LIMITES DE MÉMOIRE
+# =====================================================
+
+# Limite de mémoire virtuelle (MB)
+# Valeur: nombre en MB, ou "unlimited"
+# Recommandé: "unlimited" pour git-mirror (gère bien la mémoire)
+VM_LIMIT_MB=unlimited
+
+# Limite de mémoire physique (MB)
+# Valeur: nombre en MB, ou "unlimited"
+MEMORY_LIMIT_MB=unlimited
+
+# =====================================================
+# LIMITES DE PROCESSUS
+# =====================================================
+
+# Nombre maximum de processus simultanés
+# Valeur: nombre, ou "unlimited"
+# Utile pour limiter l'impact sur les autres services
+PROCESS_LIMIT=unlimited
+
+# Nombre maximum de file descriptors ouverts
+# Valeur: nombre
+# Important pour cloner beaucoup de repos en parallèle
+FILE_DESCRIPTOR_LIMIT=10000
+
+# =====================================================
+# OPTIMISATIONS DISQUE
+# =====================================================
+
+# Utiliser tmpfs/ramdisk pour les opérations temporaires
+# Utile pour réduire l'I/O disque sur les gros volumes
+# Valeurs: true, false
+USE_TMPFS=false
+
+# Taille du tmpfs (MB)
+# Valeur: nombre en MB
+# Recommandé: 4GB (4096) pour une bonne performance
+TMPFS_SIZE_MB=4096
+
+# =====================================================
+# MONITORING ET LOGS
+# =====================================================
+
+# Activer le monitoring système durant l'exécution
+# Surveille CPU, mémoire, disque, réseau en temps réel
+# Valeurs: true, false
+MONITOR_SYSTEM=false
+
+# Intervalle de monitoring (secondes)
+# Valeur: nombre en secondes
+# Recommandé: 60 (1 minute)
+MONITOR_INTERVAL=60
+
