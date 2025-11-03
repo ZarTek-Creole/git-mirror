@@ -233,6 +233,98 @@ Describe 'Auth Module - Complete Test Suite (100% Coverage)'
   End
 
   # ===================================================================
+  # Tests: auth_interactive_menu()
+  # ===================================================================
+  Describe 'auth_interactive_menu() - Interactive Menu'
+
+    It 'handles GitHub CLI selection'
+      # Mock read to return choice 1
+      read() {
+        REPLY=1
+      }
+      export -f read
+      
+      command() {
+        if [ "$1" = "-v" ] && [ "$2" = "gh" ]; then
+          return 0
+        fi
+        command "$@"
+      }
+      export -f command
+      
+      gh() {
+        if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+          return 0
+        elif [ "$1" = "auth" ] && [ "$2" = "token" ]; then
+          echo "ghp_testtoken123"
+          return 0
+        fi
+        return 0
+      }
+      export -f gh
+      
+      When call auth_interactive_menu
+      The status should be success
+    End
+
+    It 'handles token input selection'
+      read() {
+        if [ "$1" = "-p" ]; then
+          REPLY=2
+        else
+          REPLY="ghp_testtoken123"
+        fi
+      }
+      export -f read
+      
+      curl() {
+        echo '{"login":"testuser"}'
+        return 0
+      }
+      export -f curl
+      
+      When call auth_interactive_menu
+      The status should be success
+    End
+
+    It 'handles SSH selection'
+      read() {
+        REPLY=3
+      }
+      export -f read
+      
+      ssh() {
+        echo "Hi testuser! You've successfully authenticated"
+        return 0
+      }
+      export -f ssh
+      
+      When call auth_interactive_menu
+      The status should be success
+    End
+
+    It 'handles public mode selection'
+      read() {
+        REPLY=4
+      }
+      export -f read
+      
+      When call auth_interactive_menu
+      The status should be success
+    End
+
+    It 'handles cancellation'
+      read() {
+        REPLY=5
+      }
+      export -f read
+      
+      When call auth_interactive_menu
+      The status should be failure
+    End
+  End
+
+  # ===================================================================
   # Tests: auth_setup()
   # ===================================================================
   Describe 'auth_setup() - Module Setup'

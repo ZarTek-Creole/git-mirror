@@ -256,6 +256,113 @@ Describe 'Cache Module - Complete Test Suite'
   End
 
   # ===================================================================
+  # Tests: _create_cache_structure()
+  # ===================================================================
+  Describe '_create_cache_structure() - Cache Structure Creation'
+
+    It 'creates cache directories'
+      CACHE_DIR="/tmp/test-cache-structure-$$"
+      When call _create_cache_structure
+      The status should be success
+      The directory "$CACHE_DIR/api" should exist
+      The directory "$CACHE_DIR/metadata" should exist
+      The directory "$CACHE_DIR/state" should exist
+      rm -rf "$CACHE_DIR"
+    End
+  End
+
+  # ===================================================================
+  # Tests: cache_delete()
+  # ===================================================================
+  Describe 'cache_delete() - Cache Deletion'
+
+    It 'deletes existing cache entry'
+      call init_cache
+      call cache_set "test-key" '{"data":"test"}'
+      When call cache_delete "test-key"
+      The status should be success
+      When call cache_get "test-key"
+      The status should be failure
+    End
+
+    It 'handles non-existent key'
+      call init_cache
+      When call cache_delete "nonexistent-key"
+      The status should be success
+    End
+  End
+
+  # ===================================================================
+  # Tests: cache_exists()
+  # ===================================================================
+  Describe 'cache_exists() - Cache Existence Check'
+
+    It 'returns true for existing cache entry'
+      call init_cache
+      call cache_set "test-key" '{"data":"test"}'
+      When call cache_exists "test-key"
+      The status should be success
+    End
+
+    It 'returns false for non-existent cache entry'
+      call init_cache
+      When call cache_exists "nonexistent-key"
+      The status should be failure
+    End
+
+    It 'returns false when cache disabled'
+      CACHE_ENABLED=false
+      call init_cache
+      call cache_set "test-key" '{"data":"test"}'
+      When call cache_exists "test-key"
+      The status should be failure
+    End
+
+    It 'returns false for expired cache entry'
+      call init_cache
+      call cache_set "test-key" '{"data":"test"}'
+      local cache_file="$CACHE_DIR/metadata/test-key.json"
+      touch -t 199001010000 "$cache_file" 2>/dev/null || touch -d "1990-01-01" "$cache_file"
+      CACHE_TTL=3600
+      When call cache_exists "test-key"
+      The status should be failure
+    End
+  End
+
+  # ===================================================================
+  # Tests: cache_get_total_repos()
+  # ===================================================================
+  Describe 'cache_get_total_repos() - Get Total Repos'
+
+    It 'returns cached total repos'
+      call init_cache
+      call cache_set_total_repos "users" "testuser" "100"
+      When call cache_get_total_repos "users" "testuser"
+      The output should eq "100"
+    End
+
+    It 'returns empty when not cached'
+      call init_cache
+      When call cache_get_total_repos "users" "testuser"
+      The status should be failure
+    End
+  End
+
+  # ===================================================================
+  # Tests: cache_set_total_repos()
+  # ===================================================================
+  Describe 'cache_set_total_repos() - Set Total Repos'
+
+    It 'stores total repos'
+      call init_cache
+      When call cache_set_total_repos "users" "testuser" "100"
+      The status should be success
+      When call cache_get_total_repos "users" "testuser"
+      The output should eq "100"
+    End
+  End
+
+  # ===================================================================
   # Tests: get_cache_module_info()
   # ===================================================================
   Describe 'get_cache_module_info() - Module Information'
