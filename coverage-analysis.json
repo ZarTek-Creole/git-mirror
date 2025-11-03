@@ -1,5 +1,5 @@
 {
-  "timestamp": "2025-11-03T20:36:03Z",
+  "timestamp": "2025-11-03T20:46:24Z",
   "modules": [
 [0;34m[INFO][0m Analyse du module: github_api
 
@@ -33,23 +33,20 @@
 
 [0;34m[INFO][0m === Module: auth ===
   Total fonctions: 7
-  Fonctions testées: 3
-  Fonctions non testées: 4
-  Couverture: 42%
+  Fonctions testées: 6
+  Fonctions non testées: 1
+  Couverture: 85%
   Fonctions à tester:
-    - auth_detect_method
-    - auth_init
     - auth_interactive_menu
-    - auth_setup
   {
     "module": "auth",
     "file": "/workspace/lib/auth/auth.sh",
     "test_file": "/workspace/tests/spec/unit/test_auth_spec.sh",
     "total_functions": 7,
-    "tested_functions": 3,
-    "untested_functions": 4,
-    "coverage_percent": 42,
-    "untested_list": ["auth_detect_method","auth_init","auth_interactive_menu","auth_setup"]
+    "tested_functions": 6,
+    "untested_functions": 1,
+    "coverage_percent": 85,
+    "untested_list": ["auth_interactive_menu"]
   }
 ,
 [0;34m[INFO][0m Analyse du module: cache
@@ -79,29 +76,18 @@
 
 [0;34m[INFO][0m === Module: filters ===
   Total fonctions: 10
-  Fonctions testées: 0
-  Fonctions non testées: 10
-  Couverture: 0%
-  Fonctions à tester:
-    - filters_filter_repos
-    - filters_init
-    - filters_match_pattern
-    - filters_setup
-    - filters_should_process
-    - filters_show_summary
-    - filters_validate_pattern
-    - filters_validate_patterns
-    - get_filters_module_info
-    - get_filter_stats
+  Fonctions testées: 10
+  Fonctions non testées: 0
+  Couverture: 100%
   {
     "module": "filters",
     "file": "/workspace/lib/filters/filters.sh",
     "test_file": "/workspace/tests/spec/unit/test_filters_spec.sh",
     "total_functions": 10,
-    "tested_functions": 0,
-    "untested_functions": 10,
-    "coverage_percent": 0,
-    "untested_list": ["filters_filter_repos","filters_init","filters_match_pattern","filters_setup","filters_should_process","filters_show_summary","filters_validate_pattern","filters_validate_patterns","get_filters_module_info","get_filter_stats"]
+    "tested_functions": 10,
+    "untested_functions": 0,
+    "coverage_percent": 100,
+    "untested_list": [""]
   }
 ,
 [0;34m[INFO][0m Analyse du module: git_ops
@@ -136,24 +122,18 @@
 
 [0;34m[INFO][0m === Module: hooks ===
   Total fonctions: 5
-  Fonctions testées: 0
-  Fonctions non testées: 5
-  Couverture: 0%
-  Fonctions à tester:
-    - execute_on_error_hooks
-    - execute_post_clone_hooks
-    - execute_post_update_hooks
-    - hooks_init
-    - load_hooks_config
+  Fonctions testées: 5
+  Fonctions non testées: 0
+  Couverture: 100%
   {
     "module": "hooks",
     "file": "/workspace/lib/hooks/hooks.sh",
     "test_file": "/workspace/tests/spec/unit/test_hooks_spec.sh",
     "total_functions": 5,
-    "tested_functions": 0,
-    "untested_functions": 5,
-    "coverage_percent": 0,
-    "untested_list": ["execute_on_error_hooks","execute_post_clone_hooks","execute_post_update_hooks","hooks_init","load_hooks_config"]
+    "tested_functions": 5,
+    "untested_functions": 0,
+    "coverage_percent": 100,
+    "untested_list": [""]
   }
 ,
 [0;34m[INFO][0m Analyse du module: incremental
@@ -326,26 +306,18 @@
 
 [0;34m[INFO][0m === Module: system_control ===
   Total fonctions: 7
-  Fonctions testées: 0
-  Fonctions non testées: 7
-  Couverture: 0%
-  Fonctions à tester:
-    - apply_ionice_priority
-    - apply_network_compression
-    - apply_nice_priority
-    - apply_resource_limits
-    - system_control_init
-    - system_execute_with_limits
-    - system_show_limits
+  Fonctions testées: 7
+  Fonctions non testées: 0
+  Couverture: 100%
   {
     "module": "system_control",
     "file": "/workspace/lib/system/system_control.sh",
     "test_file": "/workspace/tests/spec/unit/test_system_control_spec.sh",
     "total_functions": 7,
-    "tested_functions": 0,
-    "untested_functions": 7,
-    "coverage_percent": 0,
-    "untested_list": ["apply_ionice_priority","apply_network_compression","apply_nice_priority","apply_resource_limits","system_control_init","system_execute_with_limits","system_show_limits"]
+    "tested_functions": 7,
+    "untested_functions": 0,
+    "coverage_percent": 100,
+    "untested_list": [""]
   }
 ,
 [0;34m[INFO][0m Analyse du module: profiling
@@ -394,8 +366,8 @@
   "summary": {
     "total_modules": 16,
     "total_functions": 176,
-    "total_tested": 89,
-    "total_untested": 87,
-    "global_coverage_percent": 50
+    "total_tested": 114,
+    "total_untested": 62,
+    "global_coverage_percent": 64
   }
 }
