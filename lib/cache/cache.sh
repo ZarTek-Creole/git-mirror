@@ -18,9 +18,11 @@ readonly CACHE_VERSION="1.0.0"
 readonly CACHE_MODULE_NAME="cache_management"
 readonly CACHE_MODULE_LOADED="true"
 
-# Configuration du cache
+# Configuration du cache (readonly pour sécurité)
 readonly DEFAULT_CACHE_TTL=3600  # 1 heure
 readonly CACHE_CLEANUP_INTERVAL=86400  # 24 heures
+readonly MIN_CACHE_TTL=60  # Minimum 1 minute
+readonly MAX_CACHE_TTL=86400  # Maximum 24 heures
 
 # Variables globales du module
 CACHE_DIR=""

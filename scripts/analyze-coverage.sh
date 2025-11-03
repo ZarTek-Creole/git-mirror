@@ -38,8 +38,10 @@ log_error() {
 # Extraire toutes les fonctions d'un fichier
 extract_functions() {
     local file="$1"
-    grep -E '^[a-zA-Z_][a-zA-Z0-9_]*\(\)\s*\{' "$file" 2>/dev/null | \
-        sed 's/()\s*{//' | \
+    # Chercher les fonctions avec ou sans espace avant {
+    grep -E '^[a-zA-Z_][a-zA-Z0-9_]*\(\)' "$file" 2>/dev/null | \
+        sed 's/()\s*{.*//' | \
+        sed 's/()$//' | \
         sed 's/^[[:space:]]*//' | \
         sort -u || true
 }
@@ -50,7 +52,10 @@ is_function_tested() {
     local test_file="$2"
     
     if [ -f "$test_file" ]; then
-        grep -q "$function_name" "$test_file" 2>/dev/null && return 0
+        # Chercher dans "When call", "Describe", ou "call" (pour setup)
+        if grep -qE "(When call |Describe '|call )$function_name\(" "$test_file" 2>/dev/null; then
+            return 0
+        fi
     fi
     return 1
 }
@@ -60,6 +65,20 @@ analyze_module() {
     local module_file="$1"
     local module_name=$(basename "$module_file" .sh)
     local test_file="$TESTS_DIR/test_${module_name}_spec.sh"
+    
+    # Chercher des variantes de noms de fichiers de test
+    if [ ! -f "$test_file" ]; then
+        # Pour github_api -> test_api_spec.sh
+        if [ "$module_name" = "github_api" ]; then
+            test_file="$TESTS_DIR/test_api_spec.sh"
+        # Pour parallel_optimized -> test_parallel_optimized_spec.sh
+        elif [ "$module_name" = "parallel_optimized" ]; then
+            test_file="$TESTS_DIR/test_parallel_optimized_spec.sh"
+        else
+            # Chercher tous les fichiers de test qui pourraient correspondre
+            test_file=$(find "$TESTS_DIR" -name "*${module_name}*_spec.sh" -o -name "*test_*${module_name}*_spec.sh" 2>/dev/null | head -1)
+        fi
+    fi
     
     log_info "Analyse du module: $module_name"
     

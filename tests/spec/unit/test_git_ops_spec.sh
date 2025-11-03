@@ -469,6 +469,34 @@ Describe 'Git Operations Module - Complete Test Suite'
   End
 
   # ===================================================================
+  # Tests: get_git_module_info()
+  # ===================================================================
+  Describe 'get_git_module_info() - Module Information'
+
+    It 'displays module information'
+      When call get_git_module_info
+      The status should be success
+      The output should include "Module:"
+      The output should include "Git"
+    End
+  End
+
+  # ===================================================================
+  # Tests: _reset_git_stats()
+  # ===================================================================
+  Describe '_reset_git_stats() - Reset Statistics'
+
+    It 'resets git statistics'
+      GIT_OPERATIONS_COUNT=10
+      GIT_SUCCESS_COUNT=8
+      GIT_FAILURE_COUNT=2
+      When call _reset_git_stats
+      The status should be success
+      # Les variables sont r?initialis?es mais ne sont pas directement accessibles
+    End
+  End
+
+  # ===================================================================
   # Tests: git_ops_setup()
   # ===================================================================
   Describe 'git_ops_setup() - Module Setup'

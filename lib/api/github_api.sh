@@ -6,12 +6,17 @@ set -euo pipefail
 # lib/api/github_api.sh - Module d'API GitHub
 # Gère les appels API avec cache, rate limiting et pagination
 
-# Variables de configuration
-API_BASE_URL="https://api.github.com"
+# Variables de configuration (readonly pour sécurité)
+readonly API_BASE_URL="https://api.github.com"
+readonly DEFAULT_API_CACHE_TTL=3600  # 1 heure par défaut
+readonly DEFAULT_API_MAX_RETRIES=3  # Nombre max de tentatives pour retry
+readonly DEFAULT_API_RETRY_DELAY=5  # Délai de base pour retry (secondes)
+
+# Variables configurables
 API_CACHE_DIR="${CACHE_DIR:-.git-mirror-cache}/api"
-API_CACHE_TTL="${API_CACHE_TTL:-3600}"  # 1 heure par défaut
-API_MAX_RETRIES="${API_MAX_RETRIES:-3}"  # Nombre max de tentatives pour retry
-API_RETRY_DELAY="${API_RETRY_DELAY:-5}"  # Délai de base pour retry (secondes)
+API_CACHE_TTL="${API_CACHE_TTL:-$DEFAULT_API_CACHE_TTL}"
+API_MAX_RETRIES="${API_MAX_RETRIES:-$DEFAULT_API_MAX_RETRIES}"
+API_RETRY_DELAY="${API_RETRY_DELAY:-$DEFAULT_API_RETRY_DELAY}"
 
 # Initialise le module API
 api_init() {

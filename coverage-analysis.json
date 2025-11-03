@@ -1,32 +1,22 @@
 {
-  "timestamp": "2025-11-03T20:50:38Z",
+  "timestamp": "2025-11-03T21:07:51Z",
   "modules": [
 [0;34m[INFO][0m Analyse du module: github_api
 
 [0;34m[INFO][0m === Module: github_api ===
   Total fonctions: 9
-  Fonctions testées: 0
-  Fonctions non testées: 9
-  Couverture: 0%
-  Fonctions à tester:
-    - api_cache_key
-    - api_cache_valid
-    - api_check_rate_limit
-    - api_fetch_all_repos
-    - api_fetch_with_cache
-    - api_get_total_repos
-    - api_init
-    - api_setup
-    - api_wait_rate_limit
+  Fonctions testées: 9
+  Fonctions non testées: 0
+  Couverture: 100%
   {
     "module": "github_api",
     "file": "/workspace/lib/api/github_api.sh",
-    "test_file": "/workspace/tests/spec/unit/test_github_api_spec.sh",
+    "test_file": "/workspace/tests/spec/unit/test_api_spec.sh",
     "total_functions": 9,
-    "tested_functions": 0,
-    "untested_functions": 9,
-    "coverage_percent": 0,
-    "untested_list": ["api_cache_key","api_cache_valid","api_check_rate_limit","api_fetch_all_repos","api_fetch_with_cache","api_get_total_repos","api_init","api_setup","api_wait_rate_limit"]
+    "tested_functions": 9,
+    "untested_functions": 0,
+    "coverage_percent": 100,
+    "untested_list": [""]
   }
 ,
 [0;34m[INFO][0m Analyse du module: auth
@@ -51,22 +41,18 @@
 
 [0;34m[INFO][0m === Module: cache ===
   Total fonctions: 18
-  Fonctions testées: 15
-  Fonctions non testées: 3
-  Couverture: 83%
-  Fonctions à tester:
-    - cache_get_state
-    - cache_set_state
-    - _cleanup_expired_cache
+  Fonctions testées: 18
+  Fonctions non testées: 0
+  Couverture: 100%
   {
     "module": "cache",
     "file": "/workspace/lib/cache/cache.sh",
     "test_file": "/workspace/tests/spec/unit/test_cache_spec.sh",
     "total_functions": 18,
-    "tested_functions": 15,
-    "untested_functions": 3,
-    "coverage_percent": 83,
-    "untested_list": ["cache_get_state","cache_set_state","_cleanup_expired_cache"]
+    "tested_functions": 18,
+    "untested_functions": 0,
+    "coverage_percent": 100,
+    "untested_list": [""]
   }
 ,
 [0;34m[INFO][0m Analyse du module: filters
@@ -91,21 +77,18 @@
 
 [0;34m[INFO][0m === Module: git_ops ===
   Total fonctions: 16
-  Fonctions testées: 14
-  Fonctions non testées: 2
-  Couverture: 87%
-  Fonctions à tester:
-    - get_git_module_info
-    - _reset_git_stats
+  Fonctions testées: 16
+  Fonctions non testées: 0
+  Couverture: 100%
   {
     "module": "git_ops",
     "file": "/workspace/lib/git/git_ops.sh",
     "test_file": "/workspace/tests/spec/unit/test_git_ops_spec.sh",
     "total_functions": 16,
-    "tested_functions": 14,
-    "untested_functions": 2,
-    "coverage_percent": 87,
-    "untested_list": ["get_git_module_info","_reset_git_stats"]
+    "tested_functions": 16,
+    "untested_functions": 0,
+    "coverage_percent": 100,
+    "untested_list": [""]
   }
 ,
 [0;34m[INFO][0m Analyse du module: hooks
@@ -130,22 +113,18 @@
 
 [0;34m[INFO][0m === Module: incremental ===
   Total fonctions: 9
-  Fonctions testées: 6
-  Fonctions non testées: 3
-  Couverture: 66%
-  Fonctions à tester:
-    - incremental_filter_updated
-    - incremental_get_stats
-    - incremental_show_summary
+  Fonctions testées: 9
+  Fonctions non testées: 0
+  Couverture: 100%
   {
     "module": "incremental",
     "file": "/workspace/lib/incremental/incremental.sh",
     "test_file": "/workspace/tests/spec/unit/test_incremental_spec.sh",
     "total_functions": 9,
-    "tested_functions": 6,
-    "untested_functions": 3,
-    "coverage_percent": 66,
-    "untested_list": ["incremental_filter_updated","incremental_get_stats","incremental_show_summary"]
+    "tested_functions": 9,
+    "untested_functions": 0,
+    "coverage_percent": 100,
+    "untested_list": [""]
   }
 ,
 [0;34m[INFO][0m Analyse du module: interactive
@@ -170,96 +149,72 @@
 
 [0;34m[INFO][0m === Module: logger ===
   Total fonctions: 19
-  Fonctions testées: 11
-  Fonctions non testées: 8
-  Couverture: 57%
-  Fonctions à tester:
-    - get_logger_module_info
-    - log_debug_stderr
-    - log_error_stderr
-    - log_fatal
-    - log_info_stderr
-    - _log_message
-    - log_success_stderr
-    - log_warning_stderr
+  Fonctions testées: 19
+  Fonctions non testées: 0
+  Couverture: 100%
   {
     "module": "logger",
     "file": "/workspace/lib/logging/logger.sh",
     "test_file": "/workspace/tests/spec/unit/test_logger_spec.sh",
     "total_functions": 19,
-    "tested_functions": 11,
-    "untested_functions": 8,
-    "coverage_percent": 57,
-    "untested_list": ["get_logger_module_info","log_debug_stderr","log_error_stderr","log_fatal","log_info_stderr","_log_message","log_success_stderr","log_warning_stderr"]
+    "tested_functions": 19,
+    "untested_functions": 0,
+    "coverage_percent": 100,
+    "untested_list": [""]
   }
 ,
 [0;34m[INFO][0m Analyse du module: metrics
 
 [0;34m[INFO][0m === Module: metrics ===
   Total fonctions: 12
-  Fonctions testées: 10
-  Fonctions non testées: 2
-  Couverture: 83%
-  Fonctions à tester:
-    - metrics_export_html
-    - metrics_show_summary
+  Fonctions testées: 12
+  Fonctions non testées: 0
+  Couverture: 100%
   {
     "module": "metrics",
     "file": "/workspace/lib/metrics/metrics.sh",
     "test_file": "/workspace/tests/spec/unit/test_metrics_spec.sh",
     "total_functions": 12,
-    "tested_functions": 10,
-    "untested_functions": 2,
-    "coverage_percent": 83,
-    "untested_list": ["metrics_export_html","metrics_show_summary"]
+    "tested_functions": 12,
+    "untested_functions": 0,
+    "coverage_percent": 100,
+    "untested_list": [""]
   }
 ,
 [0;34m[INFO][0m Analyse du module: parallel_optimized
 
 [0;34m[INFO][0m === Module: parallel_optimized ===
   Total fonctions: 5
-  Fonctions testées: 0
-  Fonctions non testées: 5
-  Couverture: 0%
-  Fonctions à tester:
-    - adjust_jobs_dynamically
-    - calculate_optimal_jobs
-    - check_api_quota
-    - check_network_connectivity
-    - preflight_checks
+  Fonctions testées: 5
+  Fonctions non testées: 0
+  Couverture: 100%
   {
     "module": "parallel_optimized",
     "file": "/workspace/lib/parallel/parallel_optimized.sh",
     "test_file": "/workspace/tests/spec/unit/test_parallel_optimized_spec.sh",
     "total_functions": 5,
-    "tested_functions": 0,
-    "untested_functions": 5,
-    "coverage_percent": 0,
-    "untested_list": ["adjust_jobs_dynamically","calculate_optimal_jobs","check_api_quota","check_network_connectivity","preflight_checks"]
+    "tested_functions": 5,
+    "untested_functions": 0,
+    "coverage_percent": 100,
+    "untested_list": [""]
   }
 ,
 [0;34m[INFO][0m Analyse du module: parallel
 
 [0;34m[INFO][0m === Module: parallel ===
   Total fonctions: 10
-  Fonctions testées: 5
-  Fonctions non testées: 5
-  Couverture: 50%
-  Fonctions à tester:
-    - clone_wrapper
-    - parallel_cleanup
-    - parallel_clone_repos
-    - parallel_execute
-    - parallel_get_stats
+  Fonctions testées: 10
+  Fonctions non testées: 0
+  Couverture: 100%
   {
     "module": "parallel",
     "file": "/workspace/lib/parallel/parallel.sh",
     "test_file": "/workspace/tests/spec/unit/test_parallel_spec.sh",
     "total_functions": 10,
-    "tested_functions": 5,
-    "untested_functions": 5,
-    "coverage_percent": 50,
-    "untested_list": ["clone_wrapper","parallel_cleanup","parallel_clone_repos","parallel_execute","parallel_get_stats"]
+    "tested_functions": 10,
+    "untested_functions": 0,
+    "coverage_percent": 100,
+    "untested_list": [""]
   }
 ,
 [0;34m[INFO][0m Analyse du module: state
@@ -320,32 +275,26 @@
 
 [0;34m[INFO][0m === Module: validation ===
   Total fonctions: 17
-  Fonctions testées: 12
-  Fonctions non testées: 5
-  Couverture: 70%
-  Fonctions à tester:
-    - init_validation
-    - validate_dir_permissions
-    - validate_file_permissions
-    - validate_filter
-    - _validate_permissions
+  Fonctions testées: 17
+  Fonctions non testées: 0
+  Couverture: 100%
   {
     "module": "validation",
     "file": "/workspace/lib/validation/validation.sh",
     "test_file": "/workspace/tests/spec/unit/test_validation_spec.sh",
     "total_functions": 17,
-    "tested_functions": 12,
-    "untested_functions": 5,
-    "coverage_percent": 70,
-    "untested_list": ["init_validation","validate_dir_permissions","validate_file_permissions","validate_filter","_validate_permissions"]
+    "tested_functions": 17,
+    "untested_functions": 0,
+    "coverage_percent": 100,
+    "untested_list": [""]
   }
 
   ],
   "summary": {
     "total_modules": 16,
     "total_functions": 176,
-    "total_tested": 134,
-    "total_untested": 42,
-    "global_coverage_percent": 76
+    "total_tested": 176,
+    "total_untested": 0,
+    "global_coverage_percent": 100
   }
 }
