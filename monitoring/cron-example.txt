@@ -1,0 +1,11 @@
+# Exemple de configuration cron pour monitoring Git Mirror
+# Ajouter à crontab: crontab -e
+
+# Collecte quotidienne de métriques (à 2h du matin)
+0 2 * * * /workspace/monitoring/collect-metrics.sh >> /workspace/monitoring/metrics.log 2>&1
+
+# Génération hebdomadaire de rapports (lundi à 8h)
+0 8 * * 1 /workspace/monitoring/generate-report.sh >> /workspace/monitoring/reports.log 2>&1
+
+# Analyse de couverture hebdomadaire (dimanche à 23h)
+0 23 * * 0 cd /workspace && bash scripts/analyze-coverage.sh >> /workspace/monitoring/coverage.log 2>&1
