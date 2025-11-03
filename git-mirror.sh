@@ -32,14 +32,17 @@ source "$LIB_DIR/interactive/interactive.sh"
 source "$LIB_DIR/state/state.sh"
 source "$LIB_DIR/incremental/incremental.sh"
 source "$LIB_DIR/utils/profiling.sh"
+source "$LIB_DIR/multi/multi_source.sh" 2>/dev/null || true
 
-# Variables globales
+    # Variables globales
 INTERRUPTED=false
 success_repos=0
 failed_repos=0
 total_repos=0
 counter=0
 NO_CACHE=false
+MULTI_SOURCES_ENABLED=false
+MULTI_SOURCES=""
 
 # Réinitialiser PROFILING_ENABLED après le chargement du module (pour éviter readonly)
 PROFILING_ENABLED="${PROFILING_ENABLED:-false}"
@@ -80,6 +83,7 @@ show_help() {
     echo "  --no-cache               Désactiver l'utilisation du cache API (forcer les appels API)"
     echo "  --repo-type TYPE         Type de dépôts à récupérer : all, public, private (défaut: all)"
     echo "  --exclude-forks          Exclure les dépôts forké de la récupération"
+    echo "  --multi-sources SOURCES  Traiter plusieurs sources (format: users:u1,u2 orgs:o1,o2)"
     echo "  -h, --help               Afficher cette aide"
     echo ""
     echo "Exemples:"
@@ -94,6 +98,7 @@ show_help() {
     echo "  $0 --repo-type private users ZarTek-Creole"
     echo "  $0 --repo-type public users ZarTek-Creole"
     echo "  $0 --exclude-forks users ZarTek-Creole"
+    echo "  $0 --multi-sources \"users:user1,user2 orgs:org1,org2\""
     echo ""
     echo "Dépendances:"
     echo "  Obligatoires: git >= 2.25, jq >= 1.6, curl >= 7.68"
@@ -381,6 +386,14 @@ parse_options() {
             --exclude-forks)
                 EXCLUDE_FORKS=true
                 shift
+                ;;
+            --multi-sources)
+                if [ $# -lt 2 ] || [ -z "$2" ] || [[ "$2" =~ ^- ]]; then
+                    log_fatal "L'option --multi-sources nécessite un argument (format: users:u1,u2 orgs:o1,o2)"
+                fi
+                MULTI_SOURCES="$2"
+                MULTI_SOURCES_ENABLED=true
+                shift 2
                 ;;
             -h|--help)
                 show_help
@@ -909,6 +922,17 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     
     # Initialiser le logger pour les messages d'erreur
     init_logger "$VERBOSE" "$QUIET" "$DRY_RUN" true
+    
+    # Gérer le mode multi-sources
+    if [ "$MULTI_SOURCES_ENABLED" = true ]; then
+        if ! multi_validate_sources "$MULTI_SOURCES"; then
+            log_error "Validation des sources multiples échouée"
+            exit 1
+        fi
+        # Traiter les sources multiples
+        multi_process_sources "$MULTI_SOURCES" "$0" "${@:1}"
+        exit 0
+    fi
     
     # Valider les arguments
     if [ -z "$context" ] || [ -z "$username_or_orgname" ]; then

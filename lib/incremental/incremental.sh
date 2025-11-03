@@ -81,24 +81,35 @@ incremental_filter_updated() {
     total_count=$(echo "$repos_json" | jq 'length')
     local updated_count=0
     
-    # Traiter chaque dépôt
-    echo "$repos_json" | jq -r '.[] | @base64' | while read -r repo_b64; do
-        local repo
-        repo=$(echo "$repo_b64" | base64 -d)
+    # OPTIMISATION: Utiliser jq pour filtrer directement au lieu d'une boucle avec base64
+    filtered_repos=$(echo "$repos_json" | jq --arg last_sync "$last_sync" '
+        . as $repos |
+        $repos | map(select(
+            (.pushed_at // "") != "" and
+            (.pushed_at | strptime("%Y-%m-%dT%H:%M:%SZ") | mktime) > 
+            ($last_sync | strptime("%Y-%m-%dT%H:%M:%SZ") | mktime)
+        ))
+    ' 2>/dev/null || echo "$repos_json")
+    
+    # Si jq ne supporte pas strptime, utiliser la méthode précédente
+    if [ "$filtered_repos" = "$repos_json" ] || [ -z "$filtered_repos" ]; then
+        # Fallback: méthode originale optimisée
+        local temp_file
+        temp_file=$(mktemp)
+        echo "$repos_json" > "$temp_file"
         
-        local repo_name
-        repo_name=$(echo "$repo" | jq -r '.name')
-        local pushed_at
-        pushed_at=$(echo "$repo" | jq -r '.pushed_at')
+        filtered_repos=$(jq --arg last_sync_ts "$last_sync_timestamp" '.[] | 
+            select(
+                (.pushed_at // "") != "" and
+                ((.pushed_at | fromdateiso8601) // 0) > ($last_sync_ts | tonumber)
+            )
+        ' "$temp_file" | jq -s .)
         
-        # Convertir la date de push en timestamp Unix
-        local pushed_timestamp
-        if pushed_timestamp=$(date -d "$pushed_at" +%s 2>/dev/null) && [ "$pushed_timestamp" -gt "$last_sync_timestamp" ]; then
-            filtered_repos=$(echo "$filtered_repos" | jq ". + [$repo]")
-            updated_count=$((updated_count + 1))
-            log_debug "Dépôt modifié: $repo_name (pushed_at: $pushed_at)"
-        fi
-    done
+        rm -f "$temp_file"
+    fi
+    
+    # Compter les dépôts filtrés
+    updated_count=$(echo "$filtered_repos" | jq 'length' 2>/dev/null || echo "0")
     
     log_success "Filtrage incrémental terminé: $updated_count/$total_count dépôts modifiés"
     

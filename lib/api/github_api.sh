@@ -6,12 +6,17 @@ set -euo pipefail
 # lib/api/github_api.sh - Module d'API GitHub
 # Gère les appels API avec cache, rate limiting et pagination
 
-# Variables de configuration
-API_BASE_URL="https://api.github.com"
+# Variables de configuration (readonly pour sécurité)
+readonly API_BASE_URL="https://api.github.com"
+readonly DEFAULT_API_CACHE_TTL=3600  # 1 heure par défaut
+readonly DEFAULT_API_MAX_RETRIES=3  # Nombre max de tentatives pour retry
+readonly DEFAULT_API_RETRY_DELAY=5  # Délai de base pour retry (secondes)
+
+# Variables configurables
 API_CACHE_DIR="${CACHE_DIR:-.git-mirror-cache}/api"
-API_CACHE_TTL="${API_CACHE_TTL:-3600}"  # 1 heure par défaut
-API_MAX_RETRIES="${API_MAX_RETRIES:-3}"  # Nombre max de tentatives pour retry
-API_RETRY_DELAY="${API_RETRY_DELAY:-5}"  # Délai de base pour retry (secondes)
+API_CACHE_TTL="${API_CACHE_TTL:-$DEFAULT_API_CACHE_TTL}"
+API_MAX_RETRIES="${API_MAX_RETRIES:-$DEFAULT_API_MAX_RETRIES}"
+API_RETRY_DELAY="${API_RETRY_DELAY:-$DEFAULT_API_RETRY_DELAY}"
 
 # Initialise le module API
 api_init() {
@@ -361,30 +366,28 @@ api_fetch_all_repos() {
         fi
         
         # Compter le nombre de dépôts dans cette page
+        # OPTIMISATION: Utiliser jq une seule fois et stocker le résultat
         local page_count
         page_count=$(echo "$response" | jq 'length')
         
         if [ "$page_count" -eq 0 ]; then
-            log_debug "Page $page contient 0 dépôts, fin de la pagination" >&2
+            if [ "$VERBOSE_LEVEL" -ge 2 ]; then
+                log_debug "Page $page contient 0 dépôts, fin de la pagination" >&2
+            fi
             break
         fi
         
-        log_debug "Page $page contient $page_count dépôts" >&2
+        if [ "$VERBOSE_LEVEL" -ge 2 ]; then
+            log_debug "Page $page contient $page_count dépôts" >&2
+        fi
         
         # Fusionner avec les dépôts existants (seulement si la page n'est pas vide)
+        # OPTIMISATION: Utiliser jq directement avec des process substitutions au lieu de fichiers temporaires
         if [ "$page_count" -gt 0 ]; then
-            local temp_file1 temp_file2 temp_result
-            temp_file1=$(mktemp)
-            temp_file2=$(mktemp)
-            temp_result=$(mktemp)
-            echo "$all_repos" > "$temp_file1"
-            echo "$response" > "$temp_file2"
-            log_debug "Avant fusion - all_repos: $(jq 'length' "$temp_file1")" >&2
-            log_debug "  response: $(jq 'length' "$temp_file2")" >&2
-            jq -s '.[0] + .[1]' "$temp_file1" "$temp_file2" > "$temp_result"
-            all_repos=$(cat "$temp_result")
-            rm -f "$temp_file1" "$temp_file2" "$temp_result"
-            log_debug "Après fusion - Total: $(echo "$all_repos" | jq 'length')" >&2
+            all_repos=$(jq -s '.[0] + .[1]' <(echo "$all_repos") <(echo "$response"))
+            if [ "$VERBOSE_LEVEL" -ge 2 ]; then
+                log_debug "Page $page fusionnée - Total: $(echo "$all_repos" | jq 'length')" >&2
+            fi
         fi
         
         # Passer à la page suivante
@@ -394,12 +397,17 @@ api_fetch_all_repos() {
         sleep 0.1
     done
     
+    # OPTIMISATION: Calculer total_count une seule fois
     local total_count
     total_count=$(echo "$all_repos" | jq 'length')
     
     # Sauvegarder le cache complet
-    echo "$all_repos" > "$cache_file"
-    log_debug "Cache complet sauvegardé: $total_count dépôts" >&2
+    if [ "$total_count" -gt 0 ]; then
+        echo "$all_repos" > "$cache_file"
+        if [ "$VERBOSE_LEVEL" -ge 2 ]; then
+            log_debug "Cache complet sauvegardé: $total_count dépôts" >&2
+        fi
+    fi
     
     log_success "Récupération terminée: $total_count dépôts trouvés" >&2
     

@@ -18,10 +18,12 @@ readonly GIT_MODULE_VERSION="1.0.0"
 readonly GIT_MODULE_NAME="git_operations"
 readonly GIT_MODULE_LOADED="true"
 
-# Configuration Git
+# Configuration Git (readonly pour sécurité)
 readonly MAX_GIT_RETRIES=3
 readonly GIT_RETRY_DELAY=2
 readonly GIT_TIMEOUT=30
+readonly DEFAULT_GIT_DEPTH=1
+readonly MAX_GIT_DEPTH=1000
 
 # Variables globales du module
 GIT_OPERATIONS_COUNT=0

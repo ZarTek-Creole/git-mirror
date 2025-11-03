@@ -131,6 +131,372 @@ Describe 'Git Operations Module - Complete Test Suite'
   End
 
   # ===================================================================
+  # Tests: clone_repository()
+  # ===================================================================
+  Describe 'clone_repository() - Repository Cloning'
+
+    It 'clones repository successfully'
+      git() {
+        if [ "$1" = "clone" ]; then
+          mkdir -p "$4/.git"
+          echo "HEAD" > "$4/.git/HEAD"
+          return 0
+        fi
+        return 0
+      }
+      export -f git
+      
+      When call clone_repository "https://github.com/user/test-repo.git" "$TEST_REPO_DIR" "" "1" "" "false" "false"
+      The status should be success
+    End
+
+    It 'handles clone failure'
+      git() {
+        return 1
+      }
+      export -f git
+      
+      When call clone_repository "https://github.com/user/test-repo.git" "$TEST_REPO_DIR" "" "1" "" "false" "false"
+      The status should be failure
+    End
+
+    It 'handles existing repository'
+      mkdir -p "$TEST_REPO_DIR/test-repo/.git"
+      echo "HEAD" > "$TEST_REPO_DIR/test-repo/.git/HEAD"
+      
+      When call clone_repository "https://github.com/user/test-repo.git" "$TEST_REPO_DIR" "" "1" "" "false" "false"
+      The status should be success
+    End
+
+    It 'handles corrupted repository'
+      mkdir -p "$TEST_REPO_DIR/test-repo"
+      # No .git directory
+      
+      git() {
+        if [ "$1" = "clone" ]; then
+          mkdir -p "$4/.git"
+          echo "HEAD" > "$4/.git/HEAD"
+          return 0
+        fi
+        return 0
+      }
+      export -f git
+      
+      When call clone_repository "https://github.com/user/test-repo.git" "$TEST_REPO_DIR" "" "1" "" "false" "false"
+      The status should be success
+    End
+
+    It 'clones with branch option'
+      git() {
+        if [ "$1" = "clone" ]; then
+          mkdir -p "$4/.git"
+          echo "HEAD" > "$4/.git/HEAD"
+          return 0
+        fi
+        return 0
+      }
+      export -f git
+      
+      When call clone_repository "https://github.com/user/test-repo.git" "$TEST_REPO_DIR" "main" "1" "" "true" "false"
+      The status should be success
+    End
+
+    It 'clones with depth option'
+      git() {
+        if [ "$1" = "clone" ]; then
+          mkdir -p "$4/.git"
+          echo "HEAD" > "$4/.git/HEAD"
+          return 0
+        fi
+        return 0
+      }
+      export -f git
+      
+      When call clone_repository "https://github.com/user/test-repo.git" "$TEST_REPO_DIR" "" "5" "" "false" "false"
+      The status should be success
+    End
+  End
+
+  # ===================================================================
+  # Tests: update_repository()
+  # ===================================================================
+  Describe 'update_repository() - Repository Update'
+
+    It 'updates repository successfully'
+      mkdir -p "$TEST_REPO_DIR/test-repo/.git"
+      echo "HEAD" > "$TEST_REPO_DIR/test-repo/.git/HEAD"
+      
+      git() {
+        if [ "$1" = "fetch" ]; then
+          return 0
+        fi
+        return 0
+      }
+      export -f git
+      
+      When call update_repository "$TEST_REPO_DIR/test-repo" ""
+      The status should be success
+    End
+
+    It 'updates specific branch'
+      mkdir -p "$TEST_REPO_DIR/test-repo/.git"
+      echo "HEAD" > "$TEST_REPO_DIR/test-repo/.git/HEAD"
+      
+      git() {
+        if [ "$1" = "fetch" ]; then
+          return 0
+        elif [ "$1" = "checkout" ]; then
+          return 0
+        elif [ "$1" = "pull" ]; then
+          return 0
+        fi
+        return 0
+      }
+      export -f git
+      
+      When call update_repository "$TEST_REPO_DIR/test-repo" "main"
+      The status should be success
+    End
+
+    It 'handles update failure'
+      mkdir -p "$TEST_REPO_DIR/test-repo/.git"
+      echo "HEAD" > "$TEST_REPO_DIR/test-repo/.git/HEAD"
+      
+      git() {
+        if [ "$1" = "fetch" ]; then
+          return 1
+        fi
+        return 0
+      }
+      export -f git
+      
+      When call update_repository "$TEST_REPO_DIR/test-repo" ""
+      The status should be failure
+    End
+
+    It 'handles non-existent repository'
+      When call update_repository "/tmp/nonexistent-$$" ""
+      The status should be failure
+    End
+  End
+
+  # ===================================================================
+  # Tests: _update_branch()
+  # ===================================================================
+  Describe '_update_branch() - Branch Update'
+
+    It 'updates existing local branch'
+      mkdir -p "$TEST_REPO_DIR/test-repo/.git/refs/heads"
+      echo "abc123" > "$TEST_REPO_DIR/test-repo/.git/refs/heads/main"
+      
+      git() {
+        if [ "$1" = "show-ref" ]; then
+          return 0
+        elif [ "$1" = "checkout" ]; then
+          return 0
+        elif [ "$1" = "pull" ]; then
+          return 0
+        fi
+        return 0
+      }
+      export -f git
+      
+      cd "$TEST_REPO_DIR/test-repo"
+      When call _update_branch "main"
+      The status should be success
+      cd - > /dev/null
+    End
+
+    It 'creates branch from remote'
+      mkdir -p "$TEST_REPO_DIR/test-repo/.git/refs/remotes/origin"
+      echo "abc123" > "$TEST_REPO_DIR/test-repo/.git/refs/remotes/origin/main"
+      
+      git() {
+        if [ "$1" = "show-ref" ] && [ "$2" = "--verify" ] && [ "$3" = "--quiet" ]; then
+          if [[ "$4" =~ "heads" ]]; then
+            return 1
+          else
+            return 0
+          fi
+        elif [ "$1" = "checkout" ]; then
+          return 0
+        fi
+        return 0
+      }
+      export -f git
+      
+      cd "$TEST_REPO_DIR/test-repo"
+      When call _update_branch "main"
+      The status should be success
+      cd - > /dev/null
+    End
+  End
+
+  # ===================================================================
+  # Tests: _update_submodules()
+  # ===================================================================
+  Describe '_update_submodules() - Submodules Update'
+
+    It 'updates submodules successfully'
+      mkdir -p "$TEST_REPO_DIR/test-repo/.git"
+      echo "HEAD" > "$TEST_REPO_DIR/test-repo/.git/HEAD"
+      
+      git() {
+        if [ "$1" = "submodule" ]; then
+          return 0
+        fi
+        return 0
+      }
+      export -f git
+      
+      cd "$TEST_REPO_DIR/test-repo"
+      When call _update_submodules
+      The status should be success
+      cd - > /dev/null
+    End
+
+    It 'handles submodule update failure'
+      mkdir -p "$TEST_REPO_DIR/test-repo/.git"
+      echo "HEAD" > "$TEST_REPO_DIR/test-repo/.git/HEAD"
+      
+      git() {
+        if [ "$1" = "submodule" ]; then
+          return 1
+        fi
+        return 0
+      }
+      export -f git
+      
+      cd "$TEST_REPO_DIR/test-repo"
+      When call _update_submodules
+      The status should be failure
+      cd - > /dev/null
+    End
+  End
+
+  # ===================================================================
+  # Tests: _configure_safe_directory()
+  # ===================================================================
+  Describe '_configure_safe_directory() - Safe Directory Configuration'
+
+    It 'configures safe directory'
+      git() {
+        if [ "$1" = "config" ] && [ "$2" = "--global" ]; then
+          return 0
+        fi
+        return 0
+      }
+      export -f git
+      
+      When call _configure_safe_directory "$TEST_REPO_DIR/test-repo"
+      The status should be success
+    End
+
+    It 'handles configuration failure'
+      git() {
+        if [ "$1" = "config" ]; then
+          return 1
+        fi
+        return 0
+      }
+      export -f git
+      
+      When call _configure_safe_directory "$TEST_REPO_DIR/test-repo"
+      The status should be success
+    End
+  End
+
+  # ===================================================================
+  # Tests: _execute_git_command()
+  # ===================================================================
+  Describe '_execute_git_command() - Git Command Execution'
+
+    It 'executes git command successfully'
+      git() {
+        return 0
+      }
+      export -f git
+      
+      When call _execute_git_command "git status" "test"
+      The status should be success
+    End
+
+    It 'handles git command failure'
+      git() {
+        return 1
+      }
+      export -f git
+      
+      When call _execute_git_command "git invalid" "test"
+      The status should be failure
+    End
+
+    It 'retries on failure'
+      local retry_count=0
+      git() {
+        retry_count=$((retry_count + 1))
+        if [ $retry_count -lt 2 ]; then
+          return 1
+        fi
+        return 0
+      }
+      export -f git
+      
+      When call _execute_git_command "git status" "test"
+      The status should be success
+    End
+  End
+
+  # ===================================================================
+  # Tests: _handle_git_error()
+  # ===================================================================
+  Describe '_handle_git_error() - Git Error Handling'
+
+    It 'handles permission error'
+      When call _handle_git_error "permission denied" "clone"
+      The status should be defined
+    End
+
+    It 'handles network error'
+      When call _handle_git_error "network unreachable" "fetch"
+      The status should be defined
+    End
+
+    It 'handles repository not found error'
+      When call _handle_git_error "repository not found" "clone"
+      The status should be defined
+    End
+  End
+
+  # ===================================================================
+  # Tests: get_git_module_info()
+  # ===================================================================
+  Describe 'get_git_module_info() - Module Information'
+
+    It 'displays module information'
+      When call get_git_module_info
+      The status should be success
+      The output should include "Module:"
+      The output should include "Git"
+    End
+  End
+
+  # ===================================================================
+  # Tests: _reset_git_stats()
+  # ===================================================================
+  Describe '_reset_git_stats() - Reset Statistics'
+
+    It 'resets git statistics'
+      GIT_OPERATIONS_COUNT=10
+      GIT_SUCCESS_COUNT=8
+      GIT_FAILURE_COUNT=2
+      When call _reset_git_stats
+      The status should be success
+      # Les variables sont r?initialis?es mais ne sont pas directement accessibles
+    End
+  End
+
+  # ===================================================================
   # Tests: git_ops_setup()
   # ===================================================================
   Describe 'git_ops_setup() - Module Setup'

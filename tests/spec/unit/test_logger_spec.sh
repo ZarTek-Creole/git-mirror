@@ -1,4 +1,4 @@
-#!/usr/bin/env shell独立
+#!/usr/bin/env shellspec
 # Tests ShellSpec pour module Logger
 
 Describe 'Logger Module - Complete Test Suite'
@@ -253,6 +253,131 @@ Describe 'Logger Module - Complete Test Suite'
       The output should include "Quiet Mode"
       The output should include "Dry-run Mode"
       The output should include "Timestamp"
+    End
+  End
+
+  # ===================================================================
+  # Tests: log_fatal()
+  # ===================================================================
+  Describe 'log_fatal() - Fatal Error Logging'
+
+    It 'logs error and exits'
+      When run log_fatal "Fatal error"
+      The output should include "ERROR"
+      The output should include "Fatal error"
+      The status should be failure
+    End
+  End
+
+  # ===================================================================
+  # Tests: _log_message()
+  # ===================================================================
+  Describe '_log_message() - Internal Log Message'
+
+    It 'formats message with timestamp'
+      export LOG_TIMESTAMP=true
+      When call _log_message "TEST" "$GREEN" "Test message"
+      The status should be success
+      The output should include "TEST"
+      The output should include "Test message"
+    End
+
+    It 'formats message without timestamp'
+      export LOG_TIMESTAMP=false
+      When call _log_message "TEST" "$GREEN" "Test message"
+      The status should be success
+      The output should include "TEST"
+      The output should not match pattern '*[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*'
+    End
+
+    It 'outputs to stderr when specified'
+      When call _log_message "TEST" "$RED" "Error message" 2
+      The status should be success
+      The error should include "TEST"
+    End
+  End
+
+  # ===================================================================
+  # Tests: log_error_stderr()
+  # ===================================================================
+  Describe 'log_error_stderr() - Error to Stderr'
+
+    It 'logs error to stderr'
+      When call log_error_stderr "Error to stderr"
+      The status should be success
+      The error should include "ERROR"
+      The error should include "Error to stderr"
+    End
+  End
+
+  # ===================================================================
+  # Tests: log_warning_stderr()
+  # ===================================================================
+  Describe 'log_warning_stderr() - Warning to Stderr'
+
+    It 'logs warning to stderr'
+      When call log_warning_stderr "Warning to stderr"
+      The status should be success
+      The error should include "WARNING"
+    End
+  End
+
+  # ===================================================================
+  # Tests: log_debug_stderr()
+  # ===================================================================
+  Describe 'log_debug_stderr() - Debug to Stderr'
+
+    It 'logs debug to stderr when verbose'
+      export VERBOSE_LEVEL=2
+      When call log_debug_stderr "Debug to stderr"
+      The status should be success
+      The error should include "DEBUG"
+    End
+
+    It 'does not log at verbose level 0'
+      export VERBOSE_LEVEL=0
+      When call log_debug_stderr "Debug to stderr"
+      The error should be empty
+    End
+  End
+
+  # ===================================================================
+  # Tests: log_info_stderr()
+  # ===================================================================
+  Describe 'log_info_stderr() - Info to Stderr'
+
+    It 'logs info to stderr'
+      When call log_info_stderr "Info to stderr"
+      The status should be success
+      The error should include "INFO"
+    End
+  End
+
+  # ===================================================================
+  # Tests: log_success_stderr()
+  # ===================================================================
+  Describe 'log_success_stderr() - Success to Stderr'
+
+    It 'logs success to stderr'
+      When call log_success_stderr "Success to stderr"
+      The status should be success
+      The error should include "SUCCESS"
+    End
+  End
+
+  # ===================================================================
+  # Tests: get_logger_module_info()
+  # ===================================================================
+  Describe 'get_logger_module_info() - Module Information'
+
+    It 'displays module information'
+      When call get_logger_module_info
+      The status should be success
+      The output should include "Module:"
+      The output should include "logger"
+      The output should include "ERROR"
+      The output should include "WARNING"
+      The output should include "INFO"
     End
   End
 
