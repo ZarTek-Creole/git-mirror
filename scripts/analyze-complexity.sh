@@ -16,14 +16,33 @@ calculate_complexity() {
     local file="$1"
     local complexity=1  # Base complexity
     
-    # Compter les structures de contrôle
-    local if_count=$(grep -c "^[^#]*\bif\b" "$file" 2>/dev/null || echo 0)
-    local case_count=$(grep -c "^[^#]*\bcase\b" "$file" 2>/dev/null || echo 0)
-    local while_count=$(grep -c "^[^#]*\bwhile\b" "$file" 2>/dev/null || echo 0)
-    local for_count=$(grep -c "^[^#]*\bfor\b" "$file" 2>/dev/null || echo 0)
-    local until_count=$(grep -c "^[^#]*\buntil\b" "$file" 2>/dev/null || echo 0)
-    local and_count=$(grep -c "^[^#]*&&" "$file" 2>/dev/null || echo 0)
-    local or_count=$(grep -c "^[^#]*||" "$file" 2>/dev/null || echo 0)
+    # Compter les structures de contrôle (utiliser awk pour compter)
+    local if_count=0
+    local case_count=0
+    local while_count=0
+    local for_count=0
+    local until_count=0
+    local and_count=0
+    local or_count=0
+    
+    if [ -f "$file" ]; then
+        if_count=$(awk '/^[^#]*\bif\b/ {count++} END {print count+0}' "$file" 2>/dev/null || echo "0")
+        case_count=$(awk '/^[^#]*\bcase\b/ {count++} END {print count+0}' "$file" 2>/dev/null || echo "0")
+        while_count=$(awk '/^[^#]*\bwhile\b/ {count++} END {print count+0}' "$file" 2>/dev/null || echo "0")
+        for_count=$(awk '/^[^#]*\bfor\b/ {count++} END {print count+0}' "$file" 2>/dev/null || echo "0")
+        until_count=$(awk '/^[^#]*\buntil\b/ {count++} END {print count+0}' "$file" 2>/dev/null || echo "0")
+        and_count=$(awk '/^[^#]*&&/ {count++} END {print count+0}' "$file" 2>/dev/null || echo "0")
+        or_count=$(awk '/^[^#]*\|\|/ {count++} END {print count+0}' "$file" 2>/dev/null || echo "0")
+    fi
+    
+    # Convertir en entiers
+    if_count=$((if_count + 0))
+    case_count=$((case_count + 0))
+    while_count=$((while_count + 0))
+    for_count=$((for_count + 0))
+    until_count=$((until_count + 0))
+    and_count=$((and_count + 0))
+    or_count=$((or_count + 0))
     
     complexity=$((complexity + if_count + case_count + while_count + for_count + until_count + and_count + or_count))
     echo "$complexity"
@@ -137,13 +156,20 @@ for module_name in "${!module_complexity[@]}"; do
     else
         echo "," >> "$PROJECT_ROOT/complexity-analysis.json"
     fi
+    local func_count=${module_functions[$module_name]}
+    local comp=${module_complexity[$module_name]}
+    local avg_comp="0"
+    if [ "$func_count" -gt 0 ]; then
+        avg_comp=$(echo "scale=2; $comp / $func_count" | bc -l 2>/dev/null || echo "0")
+    fi
+    
     cat >> "$PROJECT_ROOT/complexity-analysis.json" <<EOF
     {
       "module": "$module_name",
-      "complexity": ${module_complexity[$module_name]},
-      "functions": ${module_functions[$module_name]},
+      "complexity": $comp,
+      "functions": $func_count,
       "lines": ${module_lines[$module_name]},
-      "avg_complexity_per_function": $(echo "scale=2; ${module_complexity[$module_name]} / ${module_functions[$module_name]}" | bc -l 2>/dev/null || echo "0")
+      "avg_complexity_per_function": $avg_comp
     }
 EOF
 done

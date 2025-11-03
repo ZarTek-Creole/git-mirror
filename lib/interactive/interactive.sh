@@ -191,18 +191,14 @@ interactive_select_repos() {
         fi
         
         # Filtrer les dépôts sélectionnés
-        local filtered_repos="[]"
-        while IFS= read -r line; do
-            local repo_name
-            repo_name=$(echo "$line" | cut -d' ' -f1)
-            
-            local repo
-            repo=$(echo "$repos_json" | jq -r ".[] | select(.name == \"$repo_name\")")
-            
-            if [ -n "$repo" ]; then
-                filtered_repos=$(echo "$filtered_repos" | jq ". + [$repo]")
-            fi
-        done <<< "$selected_repos"
+        # OPTIMISATION: Utiliser jq pour filtrer directement au lieu d'une boucle
+        local repo_names_list
+        repo_names_list=$(echo "$selected_repos" | cut -d' ' -f1 | jq -R -s 'split("\n") | map(select(. != ""))' 2>/dev/null)
+        if [ -n "$repo_names_list" ] && [ "$repo_names_list" != "[]" ]; then
+            filtered_repos=$(echo "$repos_json" | jq --argjson names "$repo_names_list" '[.[] | select(.name as $n | $names | index($n) != null)]' 2>/dev/null || echo "[]")
+        else
+            filtered_repos="[]"
+        fi
         
         log_success "Dépôts sélectionnés: $(echo "$filtered_repos" | jq 'length')"
         echo "$filtered_repos"
@@ -242,22 +238,16 @@ interactive_select_repos() {
                 local filtered_repos="[]"
                 IFS=',' read -ra numbers <<< "$selection"
                 
-                for num in "${numbers[@]}"; do
-                    num=$(echo "$num" | tr -d ' ')
-                    if [[ "$num" =~ ^[0-9]+$ ]]; then
-                        local repo_name
-                        repo_name=$(echo "$repo_names" | sed -n "${num}p")
-                        
-                        if [ -n "$repo_name" ]; then
-                            local repo
-                            repo=$(echo "$repos_json" | jq -r ".[] | select(.name == \"$repo_name\")")
-                            
-                            if [ -n "$repo" ]; then
-                                filtered_repos=$(echo "$filtered_repos" | jq ". + [$repo]")
-                            fi
-                        fi
+                # OPTIMISATION: Préparer les indices une seule fois et utiliser jq pour filtrer
+                local indices_json
+                indices_json=$(printf '%s\n' "${numbers[@]}" | tr -d ' ' | grep -E '^[0-9]+$' | jq -R . | jq -s .)
+                if [ -n "$indices_json" ] && [ "$indices_json" != "[]" ]; then
+                    local selected_names
+                    selected_names=$(echo "$repo_names" | jq -R . | jq -r --argjson indices "$indices_json" '. as $names | $indices | map($names[. - 1] // empty) | map(select(. != null))')
+                    if [ -n "$selected_names" ]; then
+                        filtered_repos=$(echo "$repos_json" | jq --argjson names "$selected_names" '[.[] | select(.name as $n | ($names | index($n) != null))]')
                     fi
-                done
+                fi
                 
                 log_success "Dépôts sélectionnés: $(echo "$filtered_repos" | jq 'length')"
                 echo "$filtered_repos"
